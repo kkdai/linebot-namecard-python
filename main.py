@@ -92,9 +92,6 @@ async def handle_callback(request: Request):
             continue
 
         user_id = event.source.user_id
-        global namecard_path
-        namecard_path = f'{namecard_path}/{user_id}'
-
         if event.message.type == "text":
             if event.message.text == "test":
                 test_namecard = generate_sample_namecard()
@@ -105,7 +102,7 @@ async def handle_callback(request: Request):
                 )
                 return 'OK'
             elif event.message.text == "list":
-                all_cards = get_all_cards()
+                all_cards = get_all_cards(user_id)
                 await line_bot_api.reply_message(
                     event.reply_token,
                     [TextSendMessage(
@@ -114,7 +111,7 @@ async def handle_callback(request: Request):
                 )
                 return 'OK'
             elif event.message.text == "remove":
-                remove_redundant_data()
+                remove_redundant_data(user_id)
                 await line_bot_api.reply_message(
                     event.reply_token,
                     [TextSendMessage(
@@ -125,7 +122,7 @@ async def handle_callback(request: Request):
                 print(f"User ID: {user_id}")
 
                 # 讀取 'users' 集合中的所有文件
-                all_cards = get_all_cards()
+                all_cards = get_all_cards(user_id)
                 # Provide a default value for reply_msg
                 reply_msg = TextSendMessage(text='No message to reply with')
 
@@ -182,7 +179,7 @@ async def handle_callback(request: Request):
             print(card_obj)
 
             # Check if receipt exists, skip if it does
-            exist = check_if_card_exists(card_obj)
+            exist = check_if_card_exists(card_obj, user_id)
             if exist:
                 reply_msg = get_namecard_flex_msg(card_obj)
                 await line_bot_api.reply_message(
@@ -193,7 +190,7 @@ async def handle_callback(request: Request):
                 )
                 return 'OK'
 
-            add_namecard(card_obj)
+            add_namecard(card_obj, user_id)
             reply_msg = get_namecard_flex_msg(card_obj)
             chinese_reply_msg = TextSendMessage(
                 text="名片資料已經成功加入資料庫。")
@@ -208,10 +205,10 @@ async def handle_callback(request: Request):
     return 'OK'
 
 
-def get_all_cards():
+def get_all_cards(u_id):
     try:
         # 引用 "namecard" 路径
-        ref = db.reference(namecard_path)
+        ref = db.reference(f'{namecard_path}/{u_id}')
 
         # 获取数据
         namecard_data = ref.get()
@@ -275,7 +272,7 @@ def generate_json_from_image(img, prompt):
     return response
 
 
-def add_namecard(namecard_obj):
+def add_namecard(namecard_obj, u_id):
     """
     将名片数据添加到 Firebase Realtime Database 的 "namecard" 路径下。
 
@@ -283,7 +280,7 @@ def add_namecard(namecard_obj):
     """
     try:
         # 引用 "namecard" 路径
-        ref = db.reference(namecard_path)
+        ref = db.reference(f'{namecard_path}/{u_id}')
 
         # 推送新的名片数据
         new_ref = ref.push(namecard_obj)
@@ -293,13 +290,13 @@ def add_namecard(namecard_obj):
         print(f'Error adding namecard: {e}')
 
 
-def remove_redundant_data():
+def remove_redundant_data(u_id):
     """
     删除 "namecard" 路径下具有相同电子邮件地址的冗余数据。
     """
     try:
         # 引用 "namecard" 路径
-        ref = db.reference(namecard_path)
+        ref = db.reference(f'{namecard_path}/{u_id}')
 
         # 获取所有名片数据
         namecard_data = ref.get()
@@ -339,7 +336,7 @@ def parse_gemini_result_to_json(card_json_str):
         return None
 
 
-def check_if_card_exists(namecard_obj):
+def check_if_card_exists(namecard_obj, u_id):
     """
     检查名片数据是否已经存在于 "namecard" 路径下。
 
@@ -354,7 +351,7 @@ def check_if_card_exists(namecard_obj):
             return False
 
         # 引用 "namecard" 路径
-        ref = db.reference(namecard_path)
+        ref = db.reference(f'{namecard_path}/{u_id}')
 
         # 获取所有名片数据
         namecard_data = ref.get()

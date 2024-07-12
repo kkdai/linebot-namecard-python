@@ -1,79 +1,73 @@
-# LineBot Smart Namecard
+# LINE Bot Namecard Manager
 
-這是一個使用 FastAPI 和 LINE Messaging API 的智能名片管理機器人。該機器人可以處理文本和圖像消息，並將名片數據存儲在 Firebase Firestore 中。
+This repository contains a LINE Bot application built using FastAPI, Firebase, and the Gemini Pro API. The bot can handle text and image messages, parse namecard information from images, and store/retrieve namecard data from Firebase.
 
-## 功能
+## Features
 
-- 接收並處理文本消息
-- 接收並處理圖像消息，從圖像中提取名片數據
-- 將名片數據存儲在 Firebase Firestore 中
-- 查詢和刪除冗餘的名片數據
+- Parse namecard information from images using the Gemini Pro API.
+- Store and retrieve namecard data from Firebase Realtime Database.
+- Handle various text commands to list, add, and remove namecard data.
 
-## 環境變數
+## Prerequisites
 
-在運行此應用程序之前，請確保設置以下環境變數：
+- Python 3.7+
+- LINE Developer Account
+- Firebase Account
+- Gemini Pro API Key
 
-- `ChannelSecret`: LINE Messaging API 的 Channel Secret
-- `ChannelAccessToken`: LINE Messaging API 的 Channel Access Token
-- `GEMINI_API_KEY`: Gemini API 的 API Key
+## Installation
 
-## 安裝
-
-1. 克隆此存儲庫：
+1. Clone the repository:
 
     ```bash
-    git clone https://github.com/yourusername/linebot-smart-namecard.git
-    cd linebot-smart-namecard
+    git clone https://github.com/yourusername/linebot-namecard-manager.git
+    cd linebot-namecard-manager
     ```
 
-2. 創建並激活虛擬環境：
-
-    ```bash
-    python3 -m venv venv
-    source venv/bin/activate
-    ```
-
-3. 安裝依賴項：
+2. Install the required packages:
 
     ```bash
     pip install -r requirements.txt
     ```
 
-4. 設置環境變數：
+3. Set up environment variables:
 
     ```bash
-    export ChannelSecret=your_channel_secret
-    export ChannelAccessToken=your_channel_access_token
-    export GEMINI_API_KEY=your_gemini_api_key
+    export ChannelSecret='YOUR_CHANNEL_SECRET'
+    export ChannelAccessToken='YOUR_CHANNEL_ACCESS_TOKEN'
+    export GEMINI_API_KEY='YOUR_GEMINI_API_KEY'
+    export FIREBASE_URL='YOUR_FIREBASE_URL'
+    export GOOGLE_CREDENTIALS='YOUR_GOOGLE_CREDENTIALS_JSON'
     ```
 
-5. 運行應用程序：
+## Usage
+
+1. Run the FastAPI application:
 
     ```bash
     uvicorn main:app --reload
     ```
 
-## 使用
+2. Set up your LINE webhook URL to point to your FastAPI server.
 
-### 接收文本消息
+3. Interact with the bot using the following commands:
+    - `test`: Generate a sample namecard.
+    - `list`: List all namecards in the database.
+    - `remove`: Remove redundant namecard data.
+    - Send an image of a namecard to parse and store its information.
 
-- 發送 "test" 消息以生成並返回示例名片數據。
-- 發送 "list" 消息以列出所有名片數據。
-- 發送 "remove" 消息以刪除冗餘的名片數據。
+## Code Overview
 
-### 接收圖像消息
+### Main Components
 
-- 發送包含名片圖像的消息，機器人將提取名片數據並將其存儲在 Firebase Firestore 中。
-
-## 代碼結構
-
-- `main.py`: 主應用程序文件，包含所有的路由和處理邏輯。
-- `requirements.txt`: 依賴項文件。
+- **FastAPI**: The web framework used to handle incoming requests from LINE.
+- **Firebase**: Used to store and retrieve namecard data.
+- **Gemini Pro API**: Used to parse namecard information from images.
 
 ## Contributing
 
-If you'd like to contribute to this project, please feel free to submit a pull request.
+Feel free to submit issues or pull requests if you have any improvements or bug fixes.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+This project is licensed under the MIT License.

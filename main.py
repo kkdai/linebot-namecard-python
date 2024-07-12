@@ -105,7 +105,6 @@ async def handle_callback(request: Request):
                 )
                 return 'OK'
             elif event.message.text == "list":
-                # 讀取 'users' 集合中的所有文件
                 all_cards = get_all_cards()
                 await line_bot_api.reply_message(
                     event.reply_token,

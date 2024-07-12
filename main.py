@@ -43,7 +43,7 @@ query_prompt = '''
 # firebase URL
 firebase_url = os.environ['FIREBASE_URL']
 # 从环境变量中读取服务账户密钥 JSON 内容
-service_account_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
+# service_account_info = json.loads(os.environ['GOOGLE_CREDENTIALS'])
 # 使用服务账户密钥 JSON 内容初始化 Firebase Admin SDK
 # cred = credentials.Certificate(service_account_info)
 cred = credentials.ApplicationDefault()

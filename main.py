@@ -103,10 +103,11 @@ async def handle_callback(request: Request):
                 return 'OK'
             elif event.message.text == "list":
                 all_cards = get_all_cards(user_id)
+                total_cards = len(all_cards)
                 await line_bot_api.reply_message(
                     event.reply_token,
                     [TextSendMessage(
-                        text=f"all DB {all_cards}")]
+                        text=f"總共有  {total_cards} 張名片資料。")]
 
                 )
                 return 'OK'
@@ -138,14 +139,7 @@ async def handle_callback(request: Request):
                 messages.append(
                     {"role": "user", "parts": prompt_msg})
                 response = generate_gemini_text_complete(messages)
-                print("------------TEXT---------------")
-                print(response.text)
-                print("---------------------------")
                 card_obj = load_json_string_to_object(response.text)
-                print("------------OBJ---------------")
-                print(card_obj)
-                print("---------------------------")
-
                 reply_card_msg = get_namecard_flex_msg(card_obj)
                 await line_bot_api.reply_message(
                     event.reply_token,
@@ -172,10 +166,8 @@ async def handle_callback(request: Request):
                 )
                 return 'OK'
 
-            print("------------JSON---------------")
             print(card_obj)
             card_obj = {k.lower(): v for k, v in card_obj.items()}
-            print("------------lowercase---------------")
             print(card_obj)
 
             # Check if receipt exists, skip if it does
@@ -185,8 +177,7 @@ async def handle_callback(request: Request):
                 await line_bot_api.reply_message(
                     event.reply_token,
                     [TextSendMessage(
-                        text="這個名片已經存在資料庫中。"), reply_msg, TextSendMessage(
-                        text=result.text)]
+                        text="這個名片已經存在資料庫中。"), reply_msg]
                 )
                 return 'OK'
 

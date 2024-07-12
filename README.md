@@ -37,7 +37,6 @@ This repository contains a LINE Bot application built using FastAPI, Firebase, a
     export ChannelAccessToken='YOUR_CHANNEL_ACCESS_TOKEN'
     export GEMINI_API_KEY='YOUR_GEMINI_API_KEY'
     export FIREBASE_URL='YOUR_FIREBASE_URL'
-    export GOOGLE_CREDENTIALS='YOUR_GOOGLE_CREDENTIALS_JSON'
     ```
 
 ## Usage

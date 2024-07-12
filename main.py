@@ -20,7 +20,7 @@ import aiohttp
 import PIL.Image
 import firebase_admin
 from firebase_admin import credentials
-from firebase_admin import firestore
+from firebase_admin import db
 
 # get channel_secret and channel_access_token from your environment variable
 channel_secret = os.getenv('ChannelSecret', None)
@@ -49,8 +49,7 @@ cred = credentials.Certificate(service_account_info)
 firebase_admin.initialize_app(
     cred, {'databaseURL': firebase_url})
 
-# 初始化 Firestore 客戶端
-db = firestore.client()
+print('Firebase Admin SDK initialized successfully.')
 
 if channel_secret is None:
     print('Specify ChannelSecret as environment variable.')

@@ -248,7 +248,8 @@ def generate_gemini_text_complete(prompt):
 
 
 def generate_json_from_image(img, prompt):
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel(
+        'gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
     response = model.generate_content([prompt, img], stream=True)
     response.resolve()
 

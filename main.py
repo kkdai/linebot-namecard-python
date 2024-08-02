@@ -154,7 +154,6 @@ async def handle_callback(request: Request):
             async for s in message_content.iter_content():
                 image_content += s
             img = PIL.Image.open(BytesIO(image_content))
-
             result = generate_json_from_image(img, imgage_prompt)
             print("------------IMAGE---------------")
             print(result.text)
@@ -318,12 +317,7 @@ def parse_gemini_result_to_json(card_json_str):
     Parse the Gemini Image JSON string from the receipt data.
     '''
     try:
-        # Split the string into lines
-        lines = card_json_str.strip().split('\n')
-        # Remove the first and last lines
-        json_str = '\n'.join(lines[1:-1])
-        # Convert JSON string to Python dictionary
-        receipt_data = json.loads(json_str)
+        receipt_data = json.loads(card_json_str)
         return receipt_data
     except json.JSONDecodeError as e:
         print(f"Error parsing JSON: {e}")

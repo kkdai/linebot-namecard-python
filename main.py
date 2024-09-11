@@ -171,7 +171,7 @@ async def handle_callback(request: Request):
             card_obj = {k.lower(): v for k, v in card_obj.items()}
             print(card_obj)
 
-            # Check if receipt exists, skip if it does
+            # Check if namecard exists, skip if it does
             exist = check_if_card_exists(card_obj, user_id)
             if exist:
                 reply_msg = get_namecard_flex_msg(card_obj)
@@ -314,11 +314,11 @@ def remove_redundant_data(u_id):
 
 def parse_gemini_result_to_json(card_json_str):
     '''
-    Parse the Gemini Image JSON string from the receipt data.
+    Parse the Gemini Image JSON string from the namecard data.
     '''
     try:
-        receipt_data = json.loads(card_json_str)
-        return receipt_data
+        namecard_data = json.loads(card_json_str)
+        return namecard_data
     except json.JSONDecodeError as e:
         print(f"Error parsing JSON: {e}")
         return None
@@ -441,4 +441,4 @@ def get_namecard_flex_msg(card_data):
 
     print("flex:", flex_msg)
     return FlexSendMessage(
-        alt_text="Receipt Data", contents=flex_msg)
+        alt_text="Namecard", contents=flex_msg)

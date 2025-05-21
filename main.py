@@ -298,12 +298,35 @@ async def handle_text_event(event: MessageEvent, user_id: str) -> None:
             [TextSendMessage(text="Redundant data removal complete.")],
         )
     else:
-        all_cards = get_all_cards(user_id)
-        prompt_msg = QUERY_PROMPT.format(all_cards=all_cards, msg=msg)
-        messages = [{"role": "user", "parts": prompt_msg}]
+        # 智慧查詢名片的邏輯，將所有名片轉成 list 並用 LLM 查詢
+        all_cards_dict = get_all_cards(user_id)
+        all_cards_list = list(all_cards_dict.values()) if all_cards_dict else []
+        # 若資料量大，可考慮先用關鍵字初步篩選
+        # filtered_cards = [c for c in all_cards_list if msg in str(c.values())]
+        # 這裡直接全部丟給 LLM
+        smart_query_prompt = (
+            "你是一個名片助理，以下是所有名片資料（JSON 陣列），"
+            "請根據使用者輸入的查詢，回傳最相關的名片 JSON（只回傳 JSON，不要多餘說明）。\n"
+            f"名片資料: {json.dumps(all_cards_list, ensure_ascii=False)}\n"
+            f"查詢: {msg}"
+        )
+        messages = [{"role": "user", "parts": smart_query_prompt}]
         response = generate_gemini_text_complete(messages)
-        card_obj = load_json_string_to_object(response.text)
-        reply_card_msg = get_namecard_flex_msg(card_obj)
+        # LLM 回傳可能是陣列或單一物件，需處理
+        try:
+            card_objs = json.loads(response.text)
+            if isinstance(card_objs, dict):
+                card_objs = [card_objs]
+        except Exception:
+            card_objs = []
+        if not card_objs:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                [TextSendMessage(text="查無相關名片資料。")],
+            )
+            return
+        # 只回傳第一筆最相關名片
+        reply_card_msg = get_namecard_flex_msg(card_objs[0])
         await line_bot_api.reply_message(event.reply_token, [reply_card_msg])
 
 

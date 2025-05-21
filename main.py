@@ -310,8 +310,11 @@ async def handle_text_event(event: MessageEvent, user_id: str) -> None:
             f"名片資料: {json.dumps(all_cards_list, ensure_ascii=False)}\n"
             f"查詢: {msg}"
         )
+        print("smart_query_prompt:", smart_query_prompt)
+        # 這裡使用 Gemini 的 text completion API
         messages = [{"role": "user", "parts": smart_query_prompt}]
         response = generate_gemini_text_complete(messages)
+        print("response:", response)
         # LLM 回傳可能是陣列或單一物件，需處理
         try:
             card_objs = json.loads(response.text)

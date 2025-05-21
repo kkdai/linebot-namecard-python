@@ -310,16 +310,31 @@ async def handle_text_event(event: MessageEvent, user_id: str) -> None:
             f"名片資料: {json.dumps(all_cards_list, ensure_ascii=False)}\n"
             f"查詢: {msg}"
         )
-        print("smart_query_prompt:", smart_query_prompt)
         # 這裡使用 Gemini 的 text completion API
         messages = [{"role": "user", "parts": smart_query_prompt}]
         response = generate_gemini_text_complete(messages)
-        print("response:", response)
+
         # LLM 回傳可能是陣列或單一物件，需處理
         try:
-            card_objs = json.loads(response.text)
+            print("namecard:", response.text)
+            card = load_json_string_to_object(response.text)
+            card_objs = json.loads(card)
             if isinstance(card_objs, dict):
                 card_objs = [card_objs]
+
+            # 回傳所有可能名片（最多五筆）
+            if len(card_objs) > 1:
+                reply_msg = [
+                    get_namecard_flex_msg(card_obj) for card_obj in card_objs[:5]
+                ]
+                await line_bot_api.reply_message(event.reply_token, reply_msg)
+                return
+
+            # 回傳單一名片
+            card_obj = card_objs[0]
+            reply_msg = get_namecard_flex_msg(card_obj)
+            await line_bot_api.reply_message(event.reply_token, [reply_msg])
+            return
         except Exception:
             card_objs = []
         if not card_objs:
@@ -328,9 +343,6 @@ async def handle_text_event(event: MessageEvent, user_id: str) -> None:
                 [TextSendMessage(text="查無相關名片資料。")],
             )
             return
-        # 只回傳第一筆最相關名片
-        reply_card_msg = get_namecard_flex_msg(card_objs[0])
-        await line_bot_api.reply_message(event.reply_token, [reply_card_msg])
 
 
 async def handle_image_event(event: MessageEvent, user_id: str) -> None:

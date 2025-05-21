@@ -130,9 +130,14 @@ def check_if_card_exists(namecard_obj: dict, u_id: str) -> bool:
 # 工具函式區 (Gemini)
 # =====================
 def generate_gemini_text_complete(prompt: list) -> object:
-    """Gemini 文字生成"""
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    return model.generate_content(prompt)
+    """Gemini 文字生成，強制要求結構化 JSON 輸出"""
+    model = genai.GenerativeModel(
+        "gemini-2.0-flash",
+        generation_config={"response_mime_type": "application/json"},
+    )
+    # 直接要求 Gemini 回傳 JSON 格式
+    response = model.generate_content(prompt)
+    return response
 
 
 def generate_json_from_image(img: PIL.Image.Image, prompt: str) -> object:
@@ -318,7 +323,8 @@ async def handle_text_event(event: MessageEvent, user_id: str) -> None:
         try:
             print("namecard:", response.text)
             card = load_json_string_to_object(response.text)
-            card_objs = json.loads(card)
+            print("card_obj:", card)
+            card_objs = json.loads(response.text)
             if isinstance(card_objs, dict):
                 card_objs = [card_objs]
 

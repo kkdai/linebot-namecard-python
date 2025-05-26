@@ -11,7 +11,7 @@ from namecard_tools import (
     query_namecards_tool,
     send_text_message_tool,
     send_flex_message_tool,
-    generate_sample_namecard_tool # Added this new tool
+    generate_sample_namecard_tool,  # Added this new tool
 )
 
 # Load environment variables from .env
@@ -26,7 +26,7 @@ all_agent_tools = [
     query_namecards_tool,
     send_text_message_tool,
     send_flex_message_tool,
-    generate_sample_namecard_tool
+    generate_sample_namecard_tool,
 ]
 
 # Detailed Agent Instruction
@@ -76,35 +76,16 @@ You will receive user queries or structured data. Here's how to behave:
 *   If a tool returns an error message (e.g., "Failed to add namecard..."), relay a user-friendly version of this error to the user using `send_text_message_tool`.
 *   Do not try to call functions that are not in your tool list (see list below).
 *   The `parse_namecard_from_image_tool` is NOT in your tool list because image parsing is handled before your invocation if an image is sent by the user. You will receive already parsed data in a query like: "A namecard image was processed. Here is the data: {{...}} for user <user_id_value>".
-*   Available tools: {', '.join([t.__name__ for t in all_agent_tools])}.
+*   Available tools: {", ".join([t.__name__ for t in all_agent_tools])}.
 """
 
 # Define the Namecard Manager Agent
 namecard_agent = LlmAgent(
     name="namecard_manager_agent",
-    model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash-latest"), # Default model, overridable by .env
+    model=os.getenv(
+        "GEMINI_MODEL", "gemini-2.0-flash-latest"
+    ),  # Default model, overridable by .env
     instruction=INSTRUCTION,
     description="An agent to manage digital namecards via LINE, using Firebase for storage and Gemini for queries.",
-    tools=all_agent_tools
+    tools=all_agent_tools,
 )
-
-if __name__ == "__main__":
-    # This is a basic placeholder to confirm the agent definition.
-    print(f"Agent '{namecard_agent.name}' defined with model '{namecard_agent.model}'.")
-    # print(f"Description: {namecard_agent.description}")
-    # print(f"Instruction: {namecard_agent.instruction}")
-    print(f"Tools available to agent: {[tool.__name__ for tool in namecard_agent.tools]}")
-    
-    # Example of how the agent might be called (conceptual)
-    # from google.adk.engine import Engine
-    # engine = Engine()
-    # test_query = "Hi there! Can you list my cards?"
-    # test_user_id = "test_user_main_agent_001"
-    # print(f"\nSimulating agent call for user '{test_user_id}' with query: '{test_query}'")
-    # # The actual call would be asynchronous in the webhook
-    # for response_part in engine.stream(namecard_agent, query=test_query, user_id=test_user_id, session_id=test_user_id):
-    #     # In a real scenario, these response_parts might be tool calls or final text responses
-    #     # The tools themselves (like send_text_message_tool) would handle the output to LINE.
-    #     # The ADK engine orchestrates this.
-    #     print(f"Agent response part: {response_part}")
-    print("\nTo run this agent with LINE, use the adk_webhook_main.py endpoint.")

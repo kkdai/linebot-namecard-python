@@ -1,27 +1,30 @@
-import os
 import json
+import sys
+import os
+import aiohttp
 from io import BytesIO
 from dotenv import load_dotenv
 
-import uvicorn
-from fastapi import FastAPI, Request, HTTPException
+# Import necessary libraries
+from fastapi import Request, FastAPI, HTTPException
 from fastapi.concurrency import run_in_threadpool  # For running synchronous ADK engine
 
-from linebot.v3.webhook import WebhookParser
-from linebot.v3.messaging import (
-    AsyncLineBotApi,
-    Configuration,
-    TextSendMessage,  # Though agent tools will send most messages
-)
-from linebot.v3.exceptions import InvalidSignatureError
-from linebot.v3.webhooks import MessageEvent, TextMessageContent, ImageMessageContent
 
-# ADK and project imports
-from google.adk.engine import Engine
-from tools_agens.namecard_agent import namecard_agent  # The ADK agent
+from linebot.models import MessageEvent, TextSendMessage
+from linebot.exceptions import InvalidSignatureError
+from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
+from linebot import AsyncLineBotApi, WebhookParser
+
+# ADK and GenAI imports
+from google.adk.agents import Agent
+from google.adk.runners import Runner
+from google.genai import types
+from google.adk.sessions import InMemorySessionService  # Add this import
+
+from tools_agents.namecard_agent import namecard_agent  # The ADK agent
 
 # Import specific tools needed by the webhook handler directly
-from tools_agens.namecard_tools import (
+from tools_agents.namecard_tools import (
     parse_namecard_from_image_tool,
     send_text_message_tool,
 )
@@ -30,213 +33,362 @@ from tools_agens.namecard_tools import (
 load_dotenv()
 
 # Configuration
-CHANNEL_SECRET = os.getenv("ChannelSecret")
-CHANNEL_ACCESS_TOKEN = os.getenv("ChannelAccessToken")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")  # For parse_namecard_from_image_tool
+channel_secret = os.getenv("ChannelSecret")
+channel_access_token = os.getenv("ChannelAccessToken")
+
+# Firebase and Google GenAI configuration
 FIREBASE_URL = os.getenv("FIREBASE_URL")  # For Firebase tools used by agent
+USE_VERTEX = os.getenv("GOOGLE_GENAI_USE_VERTEXAI") or "False"
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") or ""
 
-if not CHANNEL_SECRET:
-    raise ValueError("ChannelSecret not found in environment variables.")
-if not CHANNEL_ACCESS_TOKEN:
-    raise ValueError("ChannelAccessToken not found in environment variables.")
-if not GEMINI_API_KEY:
-    # parse_namecard_from_image_tool requires this.
-    print("Warning: GEMINI_API_KEY not found. Image processing will fail.")
-if not FIREBASE_URL:
-    # Firebase tools used by the agent require this.
-    print("Warning: FIREBASE_URL not found. Agent's Firebase tools may fail.")
+# Validate environment variables
+if channel_secret is None:
+    print("Specify ChannelSecret as environment variable.")
+    sys.exit(1)
+if channel_access_token is None:
+    print("Specify ChannelAccessToken as environment variable.")
+    sys.exit(1)
+if USE_VERTEX == "True":  # Check if USE_VERTEX is true as a string
+    GOOGLE_CLOUD_PROJECT = os.getenv("GOOGLE_CLOUD_PROJECT")
+    GOOGLE_CLOUD_LOCATION = os.getenv("GOOGLE_CLOUD_LOCATION")
+    if not GOOGLE_CLOUD_PROJECT:
+        raise ValueError(
+            "Please set GOOGLE_CLOUD_PROJECT via env var or code when USE_VERTEX is true."
+        )
+    if not GOOGLE_CLOUD_LOCATION:
+        raise ValueError(
+            "Please set GOOGLE_CLOUD_LOCATION via env var or code when USE_VERTEX is true."
+        )
+elif not GOOGLE_API_KEY:
+    raise ValueError("Please set GOOGLE_API_KEY via env var or code.")
 
 
-# Initialize LINE SDK
-line_config = Configuration(access_token=CHANNEL_ACCESS_TOKEN)
-line_bot_api = AsyncLineBotApi(configuration=line_config)
-parser = WebhookParser(channel_secret=CHANNEL_SECRET)
+# Initialize InMemorySessionService
+session_service = InMemorySessionService()
+active_sessions = {}  # Cache for active session IDs per user
 
-# Initialize ADK Engine
-adk_engine = Engine()
-
-# Initialize FastAPI app
+# Initialize the FastAPI app for LINEBot
 app = FastAPI()
+client_session = aiohttp.ClientSession()
+async_http_client = AiohttpAsyncHttpClient(client_session)
+line_bot_api = AsyncLineBotApi(channel_access_token, async_http_client)
+parser = WebhookParser(channel_secret)
+
+APP_NAME = "linebot_adk_app"
+
+# Key Concept: Runner orchestrates the agent execution loop.
+runner = Runner(
+    agent=namecard_agent,  # The agent we want to run
+    app_name=APP_NAME,  # Associates runs with our app
+    session_service=session_service,  # Uses our session manager
+)
+print(f"Runner created for agent '{runner.agent.name}'.")
 
 
-@app.post("/webhook")
+async def get_or_create_session(user_id):
+    if user_id not in active_sessions:
+        # Create a new session for this user
+        session_id = f"session_{user_id}"
+        session = await session_service.create_session(
+            app_name=APP_NAME, user_id=user_id, session_id=session_id
+        )
+        active_sessions[user_id] = session_id
+        print(
+            f"New session created: App='{APP_NAME}', User='{user_id}', Session='{session.id}'"
+        )
+    else:
+        # Use existing session
+        session_id = active_sessions[user_id]
+        print(
+            f"Using existing session: App='{APP_NAME}', User='{user_id}', Session='{session_id}'"
+        )
+
+    return session_id
+
+
+@app.post("/")
 async def handle_callback(request: Request):
-    signature = request.headers.get("X-Line-Signature")
-    if signature is None:
-        raise HTTPException(status_code=400, detail="X-Line-Signature header missing")
+    signature = request.headers["X-Line-Signature"]
 
+    # get request body as text
     body = await request.body()
-    body_str = body.decode("utf-8")
+    body = body.decode()
 
     try:
-        events = parser.parse(body_str, signature)
+        events = parser.parse(body, signature)
     except InvalidSignatureError:
-        print("Invalid signature. Please check your channel secret.")
         raise HTTPException(status_code=400, detail="Invalid signature")
-    except Exception as e:
-        print(f"Error parsing webhook: {e}")
-        raise HTTPException(status_code=400, detail=f"Error parsing webhook: {e}")
 
     for event in events:
-        if isinstance(event, MessageEvent):
+        if not isinstance(event, MessageEvent):
+            continue
+
+        if event.message.type == "text":
+            # Process text message
+            msg = event.message.text
             user_id = event.source.user_id
-            print(f"Processing event for user_id: {user_id}")
+            print(f"Received message: {msg} from user: {user_id}")
 
-            if isinstance(event.message, TextMessageContent):
-                user_text = event.message.text
-                print(f"Received text message: {user_text}")
-
-                # Invoke ADK Agent for text messages
-                try:
-                    print(
-                        f"Invoking ADK agent for user {user_id} with text: {user_text}"
-                    )
-                    # ADK engine.stream is synchronous, run in threadpool
-                    # The agent's tools are responsible for sending replies.
-                    # We consume the generator to ensure it runs.
-                    # TODO: Confirm how user_id is best passed to tools via ADK.
-                    # For now, passing user_id and session_id to stream method.
-                    # The agent's instruction should guide it to use user_id with its tools.
-
-                    # ADK Engine methods are synchronous
-                    def run_agent_stream():
-                        responses = []
-                        for response_part in adk_engine.stream(
-                            namecard_agent,
-                            query=user_text,
-                            user_id=user_id,  # Custom kwarg for context
-                            session_id=user_id,  # ADK standard session tracking
-                        ):
-                            responses.append(
-                                response_part
-                            )  # Collect responses if any are directly returned
-                        return "".join(str(r) for r in responses)
-
-                    await run_in_threadpool(run_agent_stream)
-                    print(f"ADK Agent text processing complete for user {user_id}.")
-
-                except Exception as e:
-                    print(f"Error invoking ADK agent for text: {e}")
-                    # Optionally send an error message back to the user
-                    # Using the synchronous send_text_message_tool from namecard_tools
-                    error_report_status = await run_in_threadpool(
-                        send_text_message_tool,
-                        user_id,
-                        f"Sorry, an error occurred while processing your text: {str(e)[:100]}",  # Truncate error
-                    )
-                    print(
-                        f"Error report status to user {user_id}: {error_report_status}"
-                    )
-
-            elif isinstance(event.message, ImageMessageContent):
-                print(f"Received image message from user {user_id}")
-                message_id = event.message.id
-
-                # Get image bytes from LINE
-                try:
-                    # Note: linebot.v3.messaging.AsyncApiClient has no .get_message_content directly
-                    # Need to use the line_bot_api (AsyncLineBotApi instance)
-                    message_content = await line_bot_api.get_message_content(
-                        message_id=message_id
-                    )
-                    image_bytes = b""
-                    # The response object itself is the content if it's small, or a stream.
-                    # For linebot v3, get_message_content returns the bytes directly if successful.
-                    if hasattr(message_content, "read"):  # If it's a stream-like object
-                        image_bytes = message_content.read()
-                    elif isinstance(message_content, bytes):  # If it's already bytes
-                        image_bytes = message_content
-                    else:
-                        # Fallback for older/different line-bot-sdk versions or unexpected types
-                        async for chunk in (
-                            message_content.iter_content()
-                        ):  # iter_content might not exist
-                            image_bytes += chunk
-
-                    if not image_bytes:
-                        raise ValueError("Failed to retrieve image bytes.")
-                    print(
-                        f"Image bytes retrieved successfully (length: {len(image_bytes)})."
-                    )
-
-                except Exception as e:
-                    print(f"Error getting image content from LINE: {e}")
-                    await run_in_threadpool(
-                        send_text_message_tool,
-                        user_id,
-                        "Sorry, I couldn't retrieve the image you sent. Please try again.",
-                    )
-                    continue  # Skip to next event
-
-                # Directly call parse_namecard_from_image_tool (utility function)
-                print("Calling parse_namecard_from_image_tool...")
-                # This tool is synchronous, run in threadpool
-                parsed_card_data = await run_in_threadpool(
-                    parse_namecard_from_image_tool, image_bytes
-                )
-
-                if parsed_card_data and not parsed_card_data.get("error"):
-                    print(f"Image parsed successfully: {parsed_card_data}")
-                    # Construct a new prompt for the agent with the parsed data
-                    agent_query_for_image_data = (
-                        f"A namecard image was processed. Here is the extracted data: "
-                        f"{json.dumps(parsed_card_data)}. "
-                        f"Please add this namecard information for user {user_id} "
-                        f"and confirm with the user."
-                    )
-
-                    try:
-                        print(
-                            f"Invoking ADK agent for user {user_id} with parsed image data."
-                        )
-
-                        def run_agent_stream_image_data():
-                            responses = []
-                            for response_part in adk_engine.stream(
-                                namecard_agent,
-                                query=agent_query_for_image_data,
-                                user_id=user_id,  # Custom kwarg for context
-                                session_id=user_id,  # ADK standard session tracking
-                            ):
-                                responses.append(response_part)
-                            return "".join(str(r) for r in responses)
-
-                        await run_in_threadpool(run_agent_stream_image_data)
-                        print(
-                            f"ADK Agent image data processing complete for user {user_id}."
-                        )
-
-                    except Exception as e:
-                        print(f"Error invoking ADK agent with parsed image data: {e}")
-                        await run_in_threadpool(
-                            send_text_message_tool,
-                            user_id,
-                            f"Sorry, an error occurred while processing the extracted card data: {str(e)[:100]}",
-                        )
-                else:
-                    error_detail = (
-                        parsed_card_data.get("details", "Unknown error during parsing.")
-                        if parsed_card_data
-                        else "Parsing returned no data."
-                    )
-                    print(f"Failed to parse image: {error_detail}")
-                    await run_in_threadpool(
-                        send_text_message_tool,
-                        user_id,
-                        f"Sorry, I couldn't understand the content of the namecard image. Details: {error_detail[:100]}",
-                    )
-            else:
-                print(f"Received unhandled message type: {event.message.type}")
+            # Use the user's prompt directly with the agent
+            response = await call_agent_async(msg, user_id)
+            reply_msg = TextSendMessage(text=response)
+            await line_bot_api.reply_message(event.reply_token, reply_msg)
+        elif event.message.type == "image":
+            return "OK"
         else:
-            print(f"Received unhandled event type: {type(event)}")
+            continue
 
     return "OK"
 
 
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 8080))
-    print(f"Starting Uvicorn server on host 0.0.0.0 port {port}")
-    # Make sure to use the correct variable name for the app, which is `app`
-    uvicorn.run(
-        "adk_webhook_main:app", host="0.0.0.0", port=port, reload=True
-    )  # reload=True for dev
+async def call_agent_async(query: str, user_id: str) -> str:
+    """Sends a query to the agent and prints the final response."""
+    print(f"\n>>> User Query: {query}")
+
+    # Get or create a session for this user
+    session_id = await get_or_create_session(user_id)
+
+    # Prepare the user's message in ADK format
+    content = types.Content(role="user", parts=[types.Part(text=query)])
+
+    final_response_text = "Agent did not produce a final response."  # Default
+
+    try:
+        # Key Concept: run_async executes the agent logic and yields Events.
+        # We iterate through events to find the final answer.
+        async for event in runner.run_async(
+            user_id=user_id, session_id=session_id, new_message=content
+        ):
+            # You can uncomment the line below to see *all* events during execution
+            # print(f"  [Event] Author: {event.author}, Type: {type(event).__name__}, Final: {event.is_final_response()}, Content: {event.content}")
+
+            # Key Concept: is_final_response() marks the concluding message for the turn.
+            if event.is_final_response():
+                if event.content and event.content.parts:
+                    # Assuming text response in the first part
+                    final_response_text = event.content.parts[0].text
+                elif (
+                    event.actions and event.actions.escalate
+                ):  # Handle potential errors/escalations
+                    final_response_text = f"Agent escalated: {event.error_message or 'No specific message.'}"
+                # Add more checks here if needed (e.g., specific error codes)
+                break  # Stop processing events once the final response is found
+    except ValueError as e:
+        if "Session not found" in str(e):
+            print(
+                f"Initial 'Session not found' error: {str(e)}. Attempting to recreate session and retry."
+            )
+            active_sessions.pop(user_id, None)
+            new_session_id = await get_or_create_session(
+                user_id
+            )  # Renamed to avoid confusion
+            print(f"Retrying with new session: {new_session_id}")
+            try:
+                # Initialize final_response_text for the retry attempt
+                retry_final_response_text = (
+                    "Agent did not produce a final response on retry."
+                )
+                async for event in runner.run_async(
+                    user_id=user_id, session_id=new_session_id, new_message=content
+                ):
+                    if event.is_final_response():
+                        if event.content and event.content.parts:
+                            retry_final_response_text = event.content.parts[0].text
+                        elif event.actions and event.actions.escalate:
+                            retry_final_response_text = f"Agent escalated on retry: {event.error_message or 'No specific message.'}"
+                        break
+                final_response_text = (
+                    retry_final_response_text  # Assign retry result here
+                )
+            except Exception as e2:
+                print(f"Error during retry attempt: {str(e2)}")
+                final_response_text = (
+                    f"Sorry, I encountered an error after a session issue: {str(e2)}"
+                )
+        else:
+            # This is for ValueErrors not related to "Session not found"
+            print(
+                f"Error processing request (non-session related ValueError): {str(e)}"
+            )
+            final_response_text = f"Sorry, I encountered an error: {str(e)}"
+    except Exception as ex:
+        # Catch any other unexpected errors
+        print(f"An unexpected error occurred: {str(ex)}")
+        final_response_text = f"Sorry, an unexpected error occurred: {str(ex)}"
+
+    print(f"<<< Agent Response: {final_response_text}")
+    return final_response_text
+
+
+# @app.post("/webhook")
+# async def handle_callback(request: Request):
+#     signature = request.headers.get("X-Line-Signature")
+#     if signature is None:
+#         raise HTTPException(status_code=400, detail="X-Line-Signature header missing")
+
+#     body = await request.body()
+#     body_str = body.decode("utf-8")
+
+#     try:
+#         events = parser.parse(body_str, signature)
+#     except InvalidSignatureError:
+#         print("Invalid signature. Please check your channel secret.")
+#         raise HTTPException(status_code=400, detail="Invalid signature")
+#     except Exception as e:
+#         print(f"Error parsing webhook: {e}")
+#         raise HTTPException(status_code=400, detail=f"Error parsing webhook: {e}")
+
+#     for event in events:
+#         if isinstance(event, MessageEvent):
+#             user_id = event.source.user_id
+#             print(f"Processing event for user_id: {user_id}")
+
+#             if isinstance(event.message, TextMessageContent):
+#                 user_text = event.message.text
+#                 print(f"Received text message: {user_text}")
+
+#                 # Invoke ADK Agent for text messages
+#                 try:
+#                     print(
+#                         f"Invoking ADK agent for user {user_id} with text: {user_text}"
+#                     )
+#                     # ADK engine.stream is synchronous, run in threadpool
+#                     # The agent's tools are responsible for sending replies.
+#                     # We consume the generator to ensure it runs.
+#                     # TODO: Confirm how user_id is best passed to tools via ADK.
+#                     # For now, passing user_id and session_id to stream method.
+#                     # The agent's instruction should guide it to use user_id with its tools.
+
+#                     # ADK Engine methods are synchronous
+#                     def run_agent_stream():
+#                         responses = []
+#                         for response_part in adk_engine.stream(
+#                             namecard_agent,
+#                             query=user_text,
+#                             user_id=user_id,  # Custom kwarg for context
+#                             session_id=user_id,  # ADK standard session tracking
+#                         ):
+#                             responses.append(
+#                                 response_part
+#                             )  # Collect responses if any are directly returned
+#                         return "".join(str(r) for r in responses)
+
+#                     await run_in_threadpool(run_agent_stream)
+#                     print(f"ADK Agent text processing complete for user {user_id}.")
+
+#                 except Exception as e:
+#                     print(f"Error invoking ADK agent for text: {e}")
+#                     # Optionally send an error message back to the user
+#                     # Using the synchronous send_text_message_tool from namecard_tools
+#                     error_report_status = await run_in_threadpool(
+#                         send_text_message_tool,
+#                         user_id,
+#                         f"Sorry, an error occurred while processing your text: {str(e)[:100]}",  # Truncate error
+#                     )
+#                     print(
+#                         f"Error report status to user {user_id}: {error_report_status}"
+#                     )
+
+#             elif isinstance(event.message, ImageMessageContent):
+#                 print(f"Received image message from user {user_id}")
+#                 message_id = event.message.id
+
+#                 # Get image bytes from LINE
+#                 try:
+#                     # Note: linebot.v3.messaging.AsyncApiClient has no .get_message_content directly
+#                     # Need to use the line_bot_api (AsyncLineBotApi instance)
+#                     message_content = await line_bot_api.get_message_content(
+#                         message_id=message_id
+#                     )
+#                     image_bytes = b""
+#                     # The response object itself is the content if it's small, or a stream.
+#                     # For linebot v3, get_message_content returns the bytes directly if successful.
+#                     if hasattr(message_content, "read"):  # If it's a stream-like object
+#                         image_bytes = message_content.read()
+#                     elif isinstance(message_content, bytes):  # If it's already bytes
+#                         image_bytes = message_content
+#                     else:
+#                         # Fallback for older/different line-bot-sdk versions or unexpected types
+#                         async for chunk in (
+#                             message_content.iter_content()
+#                         ):  # iter_content might not exist
+#                             image_bytes += chunk
+
+#                     if not image_bytes:
+#                         raise ValueError("Failed to retrieve image bytes.")
+#                     print(
+#                         f"Image bytes retrieved successfully (length: {len(image_bytes)})."
+#                     )
+
+#                 except Exception as e:
+#                     print(f"Error getting image content from LINE: {e}")
+#                     await run_in_threadpool(
+#                         send_text_message_tool,
+#                         user_id,
+#                         "Sorry, I couldn't retrieve the image you sent. Please try again.",
+#                     )
+#                     continue  # Skip to next event
+
+#                 # Directly call parse_namecard_from_image_tool (utility function)
+#                 print("Calling parse_namecard_from_image_tool...")
+#                 # This tool is synchronous, run in threadpool
+#                 parsed_card_data = await run_in_threadpool(
+#                     parse_namecard_from_image_tool, image_bytes
+#                 )
+
+#                 if parsed_card_data and not parsed_card_data.get("error"):
+#                     print(f"Image parsed successfully: {parsed_card_data}")
+#                     # Construct a new prompt for the agent with the parsed data
+#                     agent_query_for_image_data = (
+#                         f"A namecard image was processed. Here is the extracted data: "
+#                         f"{json.dumps(parsed_card_data)}. "
+#                         f"Please add this namecard information for user {user_id} "
+#                         f"and confirm with the user."
+#                     )
+
+#                     try:
+#                         print(
+#                             f"Invoking ADK agent for user {user_id} with parsed image data."
+#                         )
+
+#                         def run_agent_stream_image_data():
+#                             responses = []
+#                             for response_part in adk_engine.stream(
+#                                 namecard_agent,
+#                                 query=agent_query_for_image_data,
+#                                 user_id=user_id,  # Custom kwarg for context
+#                                 session_id=user_id,  # ADK standard session tracking
+#                             ):
+#                                 responses.append(response_part)
+#                             return "".join(str(r) for r in responses)
+
+#                         await run_in_threadpool(run_agent_stream_image_data)
+#                         print(
+#                             f"ADK Agent image data processing complete for user {user_id}."
+#                         )
+
+#                     except Exception as e:
+#                         print(f"Error invoking ADK agent with parsed image data: {e}")
+#                         await run_in_threadpool(
+#                             send_text_message_tool,
+#                             user_id,
+#                             f"Sorry, an error occurred while processing the extracted card data: {str(e)[:100]}",
+#                         )
+#                 else:
+#                     error_detail = (
+#                         parsed_card_data.get("details", "Unknown error during parsing.")
+#                         if parsed_card_data
+#                         else "Parsing returned no data."
+#                     )
+#                     print(f"Failed to parse image: {error_detail}")
+#                     await run_in_threadpool(
+#                         send_text_message_tool,
+#                         user_id,
+#                         f"Sorry, I couldn't understand the content of the namecard image. Details: {error_detail[:100]}",
+#                     )
+#             else:
+#                 print(f"Received unhandled message type: {event.message.type}")
+#         else:
+#             print(f"Received unhandled event type: {type(event)}")
+
+#     return "OK"

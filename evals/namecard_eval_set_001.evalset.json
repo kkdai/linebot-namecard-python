@@ -1,0 +1,116 @@
+[
+  {
+    "inputs": {
+      "query": "A namecard image was processed. Here is the data: {\"name\": \"Eva Green\", \"email\": \"eva.green@example.com\", \"company\": \"GreenScape\", \"title\": \"Botanist\", \"phone\": \"555-0101\", \"address\": \"101 Garden Way\"}. Please manage this.",
+      "user_id": "eval_user_add_new"
+    },
+    "expected_behavior": [
+      {
+        "tool_code": "check_if_card_exists_tool(user_id='eval_user_add_new', namecard_data={'name': 'Eva Green', 'email': 'eva.green@example.com', 'company': 'GreenScape', 'title': 'Botanist', 'phone': '555-0101', 'address': '101 Garden Way'})",
+        "tool_result": false
+      },
+      {
+        "tool_code": "add_namecard_tool(user_id='eval_user_add_new', namecard_data={'name': 'Eva Green', 'email': 'eva.green@example.com', 'company': 'GreenScape', 'title': 'Botanist', 'phone': '555-0101', 'address': '101 Garden Way'})",
+        "tool_result": "Namecard added successfully."
+      },
+      {
+        "tool_code": "send_text_message_tool(user_id='eval_user_add_new', message_text='Namecard for Eva Green added successfully.')",
+        "tool_result": "Text message sent successfully."
+      },
+      {
+        "tool_code": "send_flex_message_tool(user_id='eval_user_add_new', alt_text='Namecard: Eva Green', namecard_data_for_flex={'name': 'Eva Green', 'email': 'eva.green@example.com', 'company': 'GreenScape', 'title': 'Botanist', 'phone': '555-0101', 'address': '101 Garden Way'})",
+        "tool_result": "Flex message sent successfully."
+      }
+    ]
+  },
+  {
+    "inputs": {
+      "query": "list",
+      "user_id": "eval_user_list_cards"
+    },
+    "expected_behavior": [
+      {
+        "tool_code": "get_all_cards_tool(user_id='eval_user_list_cards')",
+        "tool_result": {
+          "card1_id": {"name": "Card 1", "email": "card1@example.com", "title": "Engineer"},
+          "card2_id": {"name": "Card 2", "email": "card2@example.com", "title": "Designer"}
+        }
+      },
+      {
+        "tool_code": "send_text_message_tool(user_id='eval_user_list_cards', message_text='You have 2 namecards.')",
+        "tool_result": "Text message sent successfully."
+      },
+      {
+        "tool_code": "send_flex_message_tool(user_id='eval_user_list_cards', alt_text='Namecard: Card 1', namecard_data_for_flex={'name': 'Card 1', 'email': 'card1@example.com', 'title': 'Engineer'})",
+        "tool_result": "Flex message sent successfully."
+      },
+      {
+        "tool_code": "send_flex_message_tool(user_id='eval_user_list_cards', alt_text='Namecard: Card 2', namecard_data_for_flex={'name': 'Card 2', 'email': 'card2@example.com', 'title': 'Designer'})",
+        "tool_result": "Flex message sent successfully."
+      }
+    ]
+  },
+  {
+    "inputs": {
+      "query": "find Card 1",
+      "user_id": "eval_user_query_found"
+    },
+    "expected_behavior": [
+      {
+        "tool_code": "get_all_cards_tool(user_id='eval_user_query_found')",
+        "tool_result": {
+            "card1_id": {"name": "Card 1", "email": "card1@example.com", "title": "Dev"},
+            "card2_id": {"name": "Card 2", "email": "card2@example.com", "title": "Manager"}
+        }
+      },
+      {
+        "tool_code": "query_namecards_tool(user_id='eval_user_query_found', user_query='find Card 1', all_cards_list=[{'name': 'Card 1', 'email': 'card1@example.com', 'title': 'Dev'}, {'name': 'Card 2', 'email': 'card2@example.com', 'title': 'Manager'}])",
+        "tool_result": [{"name": "Card 1", "email": "card1@example.com", "title": "Dev"}]
+      },
+      {
+        "tool_code": "send_flex_message_tool(user_id='eval_user_query_found', alt_text='Namecard: Card 1', namecard_data_for_flex={'name': 'Card 1', 'email': 'card1@example.com', 'title': 'Dev'})",
+        "tool_result": "Flex message sent successfully."
+      }
+    ]
+  },
+  {
+    "inputs": {
+      "query": "find NonExistent Person",
+      "user_id": "eval_user_query_not_found"
+    },
+    "expected_behavior": [
+      {
+        "tool_code": "get_all_cards_tool(user_id='eval_user_query_not_found')",
+        "tool_result": {} 
+      },
+      {
+        "tool_code": "query_namecards_tool(user_id='eval_user_query_not_found', user_query='find NonExistent Person', all_cards_list=[])",
+        "tool_result": []
+      },
+      {
+        "tool_code": "send_text_message_tool(user_id='eval_user_query_not_found', message_text='I couldn\\'t find any namecards matching your query.')",
+        "tool_result": "Text message sent successfully."
+      }
+    ]
+  },
+  {
+    "inputs": {
+      "query": "test card",
+      "user_id": "eval_user_test_command"
+    },
+    "expected_behavior": [
+      {
+        "tool_code": "send_text_message_tool(user_id='eval_user_test_command', message_text='Okay, I\\'ll generate a sample namecard for you.')",
+        "tool_result": "Text message sent successfully."
+      },
+      {
+        "tool_code": "generate_sample_namecard_tool()",
+        "tool_result": {"name": "Sample Card-Owner", "title": "Chief Example Officer", "address": "123 Demo St, Testville, EX 45678", "email": "sample.owner@example.com", "phone": "+1-555-0100-123", "company": "Examples Inc.", "image_url": "https://raw.githubusercontent.com/kkdai/linebot-smart-namecard/main/img/logo.jpeg"}
+      },
+      {
+        "tool_code": "send_flex_message_tool(user_id='eval_user_test_command', alt_text='Sample Namecard', namecard_data_for_flex={'name': 'Sample Card-Owner', 'title': 'Chief Example Officer', 'address': '123 Demo St, Testville, EX 45678', 'email': 'sample.owner@example.com', 'phone': '+1-555-0100-123', 'company': 'Examples Inc.', 'image_url': 'https://raw.githubusercontent.com/kkdai/linebot-smart-namecard/main/img/logo.jpeg'})",
+        "tool_result": "Flex message sent successfully."
+      }
+    ]
+  }
+]

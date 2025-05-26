@@ -6,3 +6,5 @@ pydantic
 tiktoken
 Pillow
 firebase-admin
+google-adk
+python-dotenv

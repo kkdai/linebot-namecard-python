@@ -3,7 +3,7 @@ from dotenv import load_dotenv
 from google.adk.agents import LlmAgent
 
 # Import tools from namecard_tools.py
-from namecard_tools import (
+from .namecard_tools import (
     get_all_cards_tool,
     add_namecard_tool,
     remove_redundant_data_tool,

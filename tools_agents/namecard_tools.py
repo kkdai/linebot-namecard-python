@@ -68,6 +68,9 @@ def get_all_cards_tool(user_id: str) -> dict:
     Args: user_id: The unique identifier for the user.
     Returns: Dict of namecards or empty dict.
     """
+    print(
+        f"Calling get_all_cards_tool for user_id: {user_id}, DB Path: {NAMECARD_DB_PATH}/{user_id}"
+    )
     try:
         ref = db.reference(f"{NAMECARD_DB_PATH}/{user_id}")
         namecard_data = ref.get()
@@ -83,6 +86,7 @@ def add_namecard_tool(user_id: str, namecard_data: dict) -> str:
     Args: user_id, namecard_data (dict).
     Returns: Status message string.
     """
+    print(f"Calling add_namecard_tool for user_id: {user_id}")
     if not user_id:
         return "Failed: user_id empty."
     if not namecard_data or not isinstance(namecard_data, dict):
@@ -102,6 +106,7 @@ def remove_redundant_data_tool(user_id: str) -> str:
     Args: user_id.
     Returns: Status message string.
     """
+    print(f"Calling remove_redundant_data_tool for user_id: {user_id}")
     try:
         ref = db.reference(f"{NAMECARD_DB_PATH}/{user_id}")
         namecard_data = ref.get()
@@ -133,6 +138,7 @@ def check_if_card_exists_tool(user_id: str, namecard_data: dict) -> bool:
     Args: user_id, namecard_data (must contain 'email').
     Returns: True if exists, False otherwise.
     """
+    print(f"Calling check_if_card_exists_tool for user_id: {user_id}")
     try:
         email_to_check = namecard_data.get("email")
         if not email_to_check:
@@ -160,6 +166,7 @@ def parse_namecard_from_image_tool(image_bytes: bytes) -> dict:
     Args: image_bytes.
     Returns: Parsed namecard dict or {"error": ...}.
     """
+    print("Calling parse_namecard_from_image_tool")
     if not gemini_api_key:
         return {"error": "Gemini API key not configured."}
     if not image_bytes:
@@ -179,7 +186,7 @@ def parse_namecard_from_image_tool(image_bytes: bytes) -> dict:
             return {"error": "Gemini returned empty response."}
         card_obj = json.loads(response.text)
         return {k.lower(): v for k, v in card_obj.items()}
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         return {
             "error": "Failed to parse JSON from Gemini.",
             "details": response.text if "response" in locals() else "No response text",
@@ -198,6 +205,9 @@ def query_namecards_tool(user_id: str, user_query: str, all_cards_list: list) ->
     Args: user_id, user_query, all_cards_list (list of dicts).
     Returns: List of matching namecards or empty list.
     """
+    print(
+        f"Calling query_namecards_tool for user_id: {user_id} with query: {user_query}"
+    )
     if not gemini_api_key:
         print("Gemini key not configured.")
         return []
@@ -227,9 +237,9 @@ def query_namecards_tool(user_id: str, user_query: str, all_cards_list: list) ->
         else:
             print(f"Unexpected Gemini query response format: {type(parsed_response)}")
             return []
-    except json.JSONDecodeError as e:
+    except json.JSONDecodeError:
         print(
-            f"JSON parsing failed for query: {e}. Response: {response.text if 'response' in locals() else 'No response'}"
+            f"JSON parsing failed for query. Response: {response.text if 'response' in locals() else 'No response'}"
         )
         return []
     except Exception as e:
@@ -254,6 +264,7 @@ def format_namecard_flex_content(card_data: dict) -> dict:
     Args: card_data (dict): A dictionary containing namecard information.
     Returns: dict: The content structure for a FlexSendMessage.
     """
+    print("Calling format_namecard_flex_content")
     return {
         "type": "bubble",
         "size": "giga",
@@ -330,6 +341,7 @@ def send_text_message_tool(user_id: str, message_text: str) -> str:
     Args: user_id, message_text.
     Returns: Status string.
     """
+    print(f"Calling send_text_message_tool for user_id: {user_id}")
     if not CHANNEL_ACCESS_TOKEN:
         return "Failed: ChannelAccessToken not configured."
     if not user_id:
@@ -353,6 +365,7 @@ def send_flex_message_tool(
     Args: user_id, alt_text, namecard_data_for_flex (dict for the card to be displayed).
     Returns: Status string.
     """
+    print(f"Calling send_flex_message_tool for user_id: {user_id}")
     if not CHANNEL_ACCESS_TOKEN:
         return "Failed: ChannelAccessToken not configured."
     if not user_id:
@@ -382,6 +395,7 @@ def generate_sample_namecard_tool() -> dict:
     This tool is for testing or demonstration purposes.
     Returns: A dictionary representing a sample namecard.
     """
+    print("Calling generate_sample_namecard_tool")
     return {
         "name": "Sample Card-Owner",
         "title": "Chief Example Officer",

@@ -169,7 +169,7 @@ def parse_namecard_from_image_tool(image_bytes: bytes) -> dict:
     except Exception as e:
         return {"error": f"Failed to open image: {e}"}
     try:
-        model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-latest")
+        model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         model = genai.GenerativeModel(
             model_name, generation_config={"response_mime_type": "application/json"}
         )
@@ -209,7 +209,7 @@ def query_namecards_tool(user_id: str, user_query: str, all_cards_list: list) ->
         formatted_prompt = QUERY_PROMPT.format(
             all_cards=all_cards_json_str, msg=user_query
         )
-        model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash-latest")
+        model_name = os.getenv("GEMINI_MODEL", "gemini-2.0-flash")
         model = genai.GenerativeModel(
             model_name, generation_config={"response_mime_type": "application/json"}
         )

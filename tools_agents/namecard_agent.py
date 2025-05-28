@@ -83,7 +83,7 @@ You will receive user queries or structured data. Here's how to behave:
 namecard_agent = LlmAgent(
     name="namecard_manager_agent",
     model=os.getenv(
-        "GEMINI_MODEL", "gemini-2.0-flash-latest"
+        "GEMINI_MODEL", "gemini-2.0-flash"
     ),  # Default model, overridable by .env
     instruction=INSTRUCTION,
     description="An agent to manage digital namecards via LINE, using Firebase for storage and Gemini for queries.",

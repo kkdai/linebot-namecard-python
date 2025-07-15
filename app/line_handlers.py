@@ -5,7 +5,7 @@ import PIL.Image
 import json
 
 from . import firebase_utils, gemini_utils, utils, flex_messages, config
-from .main import line_bot_api, user_states
+from .bot_instance import line_bot_api, user_states
 
 
 async def handle_postback_event(event: PostbackEvent, user_id: str):

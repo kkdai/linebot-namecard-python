@@ -1,18 +1,17 @@
 from fastapi import Request, FastAPI, HTTPException
 from linebot.models import MessageEvent, PostbackEvent
 from linebot.exceptions import InvalidSignatureError
-from linebot.aiohttp_async_http_client import AiohttpAsyncHttpClient
-from linebot import AsyncLineBotApi, WebhookParser
+from linebot import WebhookParser
 import google.generativeai as genai
 import firebase_admin
 from firebase_admin import credentials
-import aiohttp
 import os
 import json
 
 from . import config
 from .line_handlers import (
     handle_text_event, handle_image_event, handle_postback_event)
+from .bot_instance import line_bot_api, close_session, parser
 
 # =====================
 # 初始化區塊
@@ -41,18 +40,9 @@ except Exception as e:
 # Gemini 初始化
 genai.configure(api_key=config.GEMINI_KEY)
 
-# FastAPI 與 LINE Bot 初始化
+# FastAPI 初始化
 app = FastAPI()
-session = aiohttp.ClientSession()
-async_http_client = AiohttpAsyncHttpClient(session)
-line_bot_api = AsyncLineBotApi(
-    config.CHANNEL_ACCESS_TOKEN, async_http_client)
 parser = WebhookParser(config.CHANNEL_SECRET)
-
-# 用一個簡單的字典來暫存使用者的狀態
-# 注意：此方法在多實例部署下會有問題，
-# 正式環境建議改用 Redis 或 Firestore 等外部儲存來管理狀態
-user_states = {}
 
 
 # =====================
@@ -81,3 +71,10 @@ async def handle_callback(request: Request):
 @app.get("/")
 async def health_check():
     return {"status": "ok"}
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await close_session()
+    print("aiohttp session closed.")
+

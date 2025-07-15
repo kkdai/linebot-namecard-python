@@ -42,7 +42,6 @@ genai.configure(api_key=config.GEMINI_KEY)
 
 # FastAPI 初始化
 app = FastAPI()
-parser = WebhookParser(config.CHANNEL_SECRET)
 
 
 # =====================

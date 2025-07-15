@@ -1,0 +1,167 @@
+from urllib.parse import parse_qsl
+from linebot.models import PostbackEvent, MessageEvent, TextSendMessage
+from io import BytesIO
+import PIL.Image
+import json
+
+from . import firebase_utils, gemini_utils, utils, flex_messages, config
+from .main import line_bot_api, user_states
+
+
+async def handle_postback_event(event: PostbackEvent, user_id: str):
+    postback_data = dict(parse_qsl(event.postback.data))
+    action = postback_data.get('action')
+
+    if action == 'add_memo':
+        card_id = postback_data.get('card_id')
+        card_name = firebase_utils.get_name_from_card(user_id, card_id)
+        if not card_name:
+            await line_bot_api.reply_message(
+                event.reply_token, TextSendMessage(text='找不到該名片資料。'))
+            return
+
+        user_states[user_id] = {
+            'action': 'adding_memo',
+            'card_id': card_id
+        }
+        reply_text = f"請輸入關於「{card_name}」的備忘錄："
+        await line_bot_api.reply_message(
+            event.reply_token, TextSendMessage(text=reply_text))
+
+
+async def handle_text_event(event: MessageEvent, user_id: str) -> None:
+    msg = event.message.text
+
+    if user_id in user_states and user_states[user_id].get(
+            'action') == 'adding_memo':
+        await handle_add_memo_state(event, user_id, msg)
+        return
+
+    if msg == "test":
+        test_namecard = utils.generate_sample_namecard()
+        reply_card_msg = flex_messages.get_namecard_flex_msg(
+            test_namecard, "test_card_id")
+        await line_bot_api.reply_message(event.reply_token, [reply_card_msg])
+    elif msg == "list":
+        all_cards = firebase_utils.get_all_cards(user_id)
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [TextSendMessage(text=f"總共有 {len(all_cards)} 張名片資料。")],
+        )
+    elif msg == "remove":
+        firebase_utils.remove_redundant_data(user_id)
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [TextSendMessage(text="Redundant data removal complete.")],
+        )
+    else:
+        await handle_smart_query(event, user_id, msg)
+
+
+async def handle_add_memo_state(event: MessageEvent, user_id: str, msg: str):
+    state = user_states[user_id]
+    card_id = state['card_id']
+
+    if firebase_utils.update_namecard_memo(card_id, user_id, msg):
+        await line_bot_api.reply_message(
+            event.reply_token, TextSendMessage(text='備忘錄已成功更新！'))
+    else:
+        await line_bot_api.reply_message(
+            event.reply_token, TextSendMessage(
+                text='新增備忘錄時發生錯誤，請稍後再試。'))
+
+    del user_states[user_id]
+
+
+async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
+    all_cards_dict = firebase_utils.get_all_cards(user_id)
+    if not all_cards_dict:
+        await line_bot_api.reply_message(
+            event.reply_token, [TextSendMessage(text="您尚未建立任何名片。")])
+        return
+
+    all_cards_list = []
+    for card_id, card_data in all_cards_dict.items():
+        card_data_with_id = card_data.copy()
+        card_data_with_id['card_id'] = card_id
+        all_cards_list.append(card_data_with_id)
+
+    smart_query_prompt = (
+        "你是一個名片助理，以下是所有名片資料（JSON 陣列），"
+        "請根據使用者輸入的查詢，回傳最相關的一或多張名片 JSON"
+        "（只回傳 JSON 陣列，不要多餘說明）。"
+        "每張名片物件中都要包含 'card_id'.\n"
+        f"名片資料: {json.dumps(all_cards_list, ensure_ascii=False)}\n"
+        f"查詢: {msg}"
+    )
+    messages = [{"role": "user", "parts": [smart_query_prompt]}]
+    response = gemini_utils.generate_gemini_text_complete(messages)
+
+    try:
+        card_objs = utils.load_json_string_to_object(response.text)
+        if isinstance(card_objs, dict):
+            card_objs = [card_objs]
+
+        if not card_objs:
+            raise ValueError("Empty result from LLM")
+
+        reply_msgs = []
+        for card_obj in card_objs[:5]:
+            card_id = card_obj.get("card_id")
+            if card_id:
+                reply_msgs.append(
+                    flex_messages.get_namecard_flex_msg(
+                        card_obj, card_id))
+
+        if reply_msgs:
+            await line_bot_api.reply_message(event.reply_token, reply_msgs)
+        else:
+            raise ValueError("No card_id found in results")
+
+    except Exception as e:
+        print(f"Error processing LLM response: {e}")
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [TextSendMessage(text="查無相關名片資料。")],
+        )
+
+
+async def handle_image_event(event: MessageEvent, user_id: str) -> None:
+    message_content = await line_bot_api.get_message_content(event.message.id)
+    image_content = b""
+    async for s in message_content.iter_content():
+        image_content += s
+    img = PIL.Image.open(BytesIO(image_content))
+    result = gemini_utils.generate_json_from_image(img, config.IMGAGE_PROMPT)
+    card_obj = utils.parse_gemini_result_to_json(result.text)
+    if not card_obj:
+        error_msg = f"無法解析這張名片，請再試一次。 錯誤資訊: {result.text}"
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [TextSendMessage(text=error_msg)]
+        )
+        return
+
+    card_obj = {k.lower(): v for k, v in card_obj.items()}
+
+    existing_card_id = firebase_utils.check_if_card_exists(card_obj, user_id)
+    if existing_card_id:
+        existing_card_data = firebase_utils.get_card_by_id(
+            user_id, existing_card_id)
+        reply_msg = flex_messages.get_namecard_flex_msg(
+            existing_card_data, existing_card_id)
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [TextSendMessage(text="這個名片已經存在資料庫中。"), reply_msg],
+        )
+        return
+
+    card_id = firebase_utils.add_namecard(card_obj, user_id)
+    if card_id:
+        reply_msg = flex_messages.get_namecard_flex_msg(card_obj, card_id)
+        chinese_reply_msg = TextSendMessage(text="名片資料已經成功加入資料庫。")
+        await line_bot_api.reply_message(
+            event.reply_token, [reply_msg, chinese_reply_msg])
+    else:
+        await line_bot_api.reply_message(
+            event.reply_token, [TextSendMessage(text="儲存名片時發生錯誤。")])

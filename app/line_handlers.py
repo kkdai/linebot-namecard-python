@@ -95,34 +95,35 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
         f"查詢: {msg}"
     )
     messages = [{"role": "user", "parts": [smart_query_prompt]}]
-    response = gemini_utils.generate_gemini_text_complete(messages)
 
     try:
+        response = gemini_utils.generate_gemini_text_complete(messages)
         card_objs = utils.load_json_string_to_object(response.text)
         if isinstance(card_objs, dict):
             card_objs = [card_objs]
 
-        if not card_objs:
-            raise ValueError("Empty result from LLM")
-
         reply_msgs = []
-        for card_obj in card_objs[:5]:
-            card_id = card_obj.get("card_id")
-            if card_id:
-                reply_msgs.append(
-                    flex_messages.get_namecard_flex_msg(
-                        card_obj, card_id))
+        if card_objs:
+            for card_obj in card_objs[:5]:
+                card_id = card_obj.get("card_id")
+                if card_id:
+                    reply_msgs.append(
+                        flex_messages.get_namecard_flex_msg(
+                            card_obj, card_id))
 
         if reply_msgs:
             await line_bot_api.reply_message(event.reply_token, reply_msgs)
         else:
-            raise ValueError("No card_id found in results")
+            await line_bot_api.reply_message(
+                event.reply_token,
+                [TextSendMessage(text="查無相關名片資料。")],
+            )
 
     except Exception as e:
         print(f"Error processing LLM response: {e}")
         await line_bot_api.reply_message(
             event.reply_token,
-            [TextSendMessage(text="查無相關名片資料。")],
+            [TextSendMessage(text="處理您的查詢時發生錯誤，請稍後再試。")],
         )
 
 

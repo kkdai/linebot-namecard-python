@@ -11,5 +11,6 @@ parser = WebhookParser(config.CHANNEL_SECRET)
 
 user_states = {}
 
+
 async def close_session():
     await session.close()

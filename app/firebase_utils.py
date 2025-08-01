@@ -92,3 +92,15 @@ def get_card_by_id(u_id: str, card_id: str) -> dict:
     except Exception as e:
         print(f"Error getting card by id: {e}")
         return None
+
+
+def update_namecard_field(
+        u_id: str, card_id: str, field: str, value: str) -> bool:
+    """更新指定名片的特定欄位"""
+    try:
+        ref = db.reference(f"{config.NAMECARD_PATH}/{u_id}/{card_id}")
+        ref.update({field: value})
+        return True
+    except Exception as e:
+        print(f"Error updating {field}: {e}")
+        return False

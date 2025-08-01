@@ -7,37 +7,55 @@ import json
 from . import firebase_utils, gemini_utils, utils, flex_messages, config
 from .bot_instance import line_bot_api, user_states
 
+FIELD_LABELS = {
+    "name": "姓名", "title": "職稱", "company": "公司",
+    "address": "地址", "phone": "電話", "email": "Email"
+}
+
 
 async def handle_postback_event(event: PostbackEvent, user_id: str):
     postback_data = dict(parse_qsl(event.postback.data))
     action = postback_data.get('action')
+    card_id = postback_data.get('card_id')
+
+    card_name = firebase_utils.get_name_from_card(user_id, card_id)
+    if not card_name:
+        await line_bot_api.reply_message(
+            event.reply_token, TextSendMessage(text='找不到該名片資料。'))
+        return
 
     if action == 'add_memo':
-        card_id = postback_data.get('card_id')
-        card_name = firebase_utils.get_name_from_card(user_id, card_id)
-        if not card_name:
-            await line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text='找不到該名片資料。'))
-            return
-
-        user_states[user_id] = {
-            'action': 'adding_memo',
-            'card_id': card_id
-        }
+        user_states[user_id] = {'action': 'adding_memo', 'card_id': card_id}
         reply_text = f"請輸入關於「{card_name}」的備忘錄："
+        await line_bot_api.reply_message(
+            event.reply_token, TextSendMessage(text=reply_text))
+
+    elif action == 'edit_card':
+        reply_msg = flex_messages.get_edit_options_flex_msg(card_id, card_name)
+        await line_bot_api.reply_message(event.reply_token, [reply_msg])
+
+    elif action == 'edit_field':
+        field_to_edit = postback_data.get('field')
+        field_label = FIELD_LABELS.get(field_to_edit, "資料")
+        user_states[user_id] = {
+            'action': 'editing_field',
+            'card_id': card_id,
+            'field': field_to_edit
+        }
+        reply_text = f"請輸入「{card_name}」的新「{field_label}」："
         await line_bot_api.reply_message(
             event.reply_token, TextSendMessage(text=reply_text))
 
 
 async def handle_text_event(event: MessageEvent, user_id: str) -> None:
     msg = event.message.text
+    user_action = user_states.get(user_id, {}).get('action')
 
-    if user_id in user_states and user_states[user_id].get(
-            'action') == 'adding_memo':
+    if user_action == 'adding_memo':
         await handle_add_memo_state(event, user_id, msg)
-        return
-
-    if msg == "test":
+    elif user_action == 'editing_field':
+        await handle_edit_field_state(event, user_id, msg)
+    elif msg == "test":
         test_namecard = utils.generate_sample_namecard()
         reply_card_msg = flex_messages.get_namecard_flex_msg(
             test_namecard, "test_card_id")
@@ -69,7 +87,30 @@ async def handle_add_memo_state(event: MessageEvent, user_id: str, msg: str):
         await line_bot_api.reply_message(
             event.reply_token, TextSendMessage(
                 text='新增備忘錄時發生錯誤，請稍後再試。'))
+    del user_states[user_id]
 
+
+async def handle_edit_field_state(event: MessageEvent, user_id: str, msg: str):
+    state = user_states[user_id]
+    card_id = state['card_id']
+    field = state['field']
+
+    if firebase_utils.update_namecard_field(user_id, card_id, field, msg):
+        updated_card = firebase_utils.get_card_by_id(user_id, card_id)
+        if updated_card:
+            reply_msg = flex_messages.get_namecard_flex_msg(
+                updated_card, card_id)
+            await line_bot_api.reply_message(
+                event.reply_token,
+                [TextSendMessage(text='資料已成功更新！'), reply_msg]
+            )
+        else:
+            await line_bot_api.reply_message(
+                event.reply_token, TextSendMessage(text='資料更新成功，但無法立即顯示。'))
+    else:
+        await line_bot_api.reply_message(
+            event.reply_token, TextSendMessage(
+                text='更新資料時發生錯誤，請稍後再試。'))
     del user_states[user_id]
 
 

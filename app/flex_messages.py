@@ -80,7 +80,7 @@ def get_namecard_flex_msg(card_data: dict, card_id: str) -> FlexSendMessage:
         },
         "footer": {
             "type": "box",
-            "layout": "vertical",
+            "layout": "horizontal",
             "spacing": "sm",
             "contents": [
                 {
@@ -93,6 +93,17 @@ def get_namecard_flex_msg(card_data: dict, card_id: str) -> FlexSendMessage:
                         "data": f"action=add_memo&card_id={card_id}",
                         "displayText": f"我想為 {name} 新增記事"
                     }
+                },
+                {
+                    "type": "button",
+                    "style": "link",
+                    "height": "sm",
+                    "action": {
+                        "type": "postback",
+                        "label": "編輯資料",
+                        "data": f"action=edit_card&card_id={card_id}",
+                        "displayText": f"我想編輯 {name} 的名片"
+                    }
                 }
             ]
         },
@@ -104,3 +115,55 @@ def get_namecard_flex_msg(card_data: dict, card_id: str) -> FlexSendMessage:
     }
 
     return FlexSendMessage(alt_text=f"{name} 的名片", contents=flex_msg)
+
+
+def get_edit_options_flex_msg(card_id: str, card_name: str) -> FlexSendMessage:
+    """產生一個包含所有可編輯欄位的 Flex Message"""
+    fields = [
+        ("姓名", "name"), ("職稱", "title"), ("公司", "company"),
+        ("地址", "address"), ("電話", "phone"), ("Email", "email")
+    ]
+    buttons = []
+    for label, field_key in fields:
+        display_text = f"我想修改 {card_name} 的 {label}"
+        buttons.append({
+            "type": "button",
+            "action": {
+                "type": "postback",
+                "label": label,
+                "data": (f"action=edit_field&card_id={card_id}"
+                         f"&field={field_key}"),
+                "displayText": display_text
+            },
+            "style": "primary",
+            "margin": "sm"
+        })
+
+    flex_msg = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": f"請問您想編輯「{card_name}」的哪個欄位？",
+                    "weight": "bold",
+                    "size": "lg",
+                    "wrap": True
+                },
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "margin": "lg",
+                    "spacing": "sm",
+                    "contents": buttons
+                }
+            ]
+        }
+    }
+
+    return FlexSendMessage(
+        alt_text=f"編輯 {card_name} 的資料",
+        contents=flex_msg
+    )

@@ -1,7 +1,6 @@
 from fastapi import Request, FastAPI, HTTPException
 from linebot.models import MessageEvent, PostbackEvent
 from linebot.exceptions import InvalidSignatureError
-from linebot import WebhookParser
 import google.generativeai as genai
 import firebase_admin
 from firebase_admin import credentials
@@ -11,7 +10,7 @@ import json
 from . import config
 from .line_handlers import (
     handle_text_event, handle_image_event, handle_postback_event)
-from .bot_instance import line_bot_api, close_session, parser
+from .bot_instance import close_session, parser
 
 # =====================
 # 初始化區塊
@@ -76,4 +75,3 @@ async def health_check():
 async def on_shutdown():
     await close_session()
     print("aiohttp session closed.")
-

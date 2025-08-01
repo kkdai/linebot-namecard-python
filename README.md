@@ -2,6 +2,11 @@
 
 這是一個使用 FastAPI、Firebase Realtime Database 以及 Gemini Pro API 打造的 LINE Bot 應用程式。這個機器人可以接收並處理文字與圖片訊息，從名片圖片中解析出聯絡人資訊，並將其儲存到 Firebase 中方便管理與查詢。
 
+<img width="453" height="638" alt="Microsoft PowerPoint 2025-08-01 18 39 19" src="https://github.com/user-attachments/assets/918c5b9a-c114-4f1d-b003-cdceaccaf01c" />
+
+<img width="401" height="690" alt="image" src="https://github.com/user-attachments/assets/2cb92c49-09da-4f84-80ed-c5463866a513" />
+
+
 ## ✨ 主要功能
 
 *   **智慧名片辨識**：傳送名片圖片，Bot 會使用 Gemini Pro Vision API 自動解析圖片中的姓名、職稱、公司、電話、Email 等資訊，並轉換成結構化資料。

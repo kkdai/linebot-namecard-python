@@ -184,6 +184,17 @@ async def handle_image_event(event: MessageEvent, user_id: str) -> None:
         )
         return
 
+    # Gemini Pro Vision API might return a list of objects, take the first one.
+    if isinstance(card_obj, list):
+        if not card_obj:
+            error_msg = f"無法解析這張名片，Gemini 回傳了空的資料。 資訊: {result.text}"
+            await line_bot_api.reply_message(
+                event.reply_token,
+                [TextSendMessage(text=error_msg)]
+            )
+            return
+        card_obj = card_obj[0]
+
     card_obj = {k.lower(): v for k, v in card_obj.items()}
 
     existing_card_id = firebase_utils.check_if_card_exists(card_obj, user_id)

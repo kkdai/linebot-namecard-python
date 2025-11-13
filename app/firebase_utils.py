@@ -1,5 +1,7 @@
-from firebase_admin import db
+from firebase_admin import db, storage
 from . import config
+from io import BytesIO
+from datetime import timedelta
 
 
 def get_all_cards(u_id: str) -> dict:
@@ -104,3 +106,35 @@ def update_namecard_field(
     except Exception as e:
         print(f"Error updating {field}: {e}")
         return False
+
+
+def upload_qrcode_to_storage(
+        image_bytes: BytesIO, user_id: str, card_id: str) -> str:
+    """
+    上傳 QR Code 圖片到 Firebase Storage 並回傳公開 URL
+
+    Args:
+        image_bytes: QR Code 圖片的 BytesIO 物件
+        user_id: 使用者 ID
+        card_id: 名片 ID
+
+    Returns:
+        圖片的公開 URL，若失敗則回傳 None
+    """
+    try:
+        bucket = storage.bucket()
+        blob_name = f"qrcodes/{user_id}/{card_id}.png"
+        blob = bucket.blob(blob_name)
+
+        # 上傳圖片
+        image_bytes.seek(0)  # 重置指標到開頭
+        blob.upload_from_file(image_bytes, content_type='image/png')
+
+        # 設定為公開可讀取
+        blob.make_public()
+
+        # 回傳公開 URL
+        return blob.public_url
+    except Exception as e:
+        print(f"Error uploading QR code to storage: {e}")
+        return None

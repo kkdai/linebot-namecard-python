@@ -16,6 +16,7 @@ GEMINI_KEY = os.getenv("GEMINI_API_KEY")
 # Firebase 設定
 # =====================
 FIREBASE_URL = os.environ.get("FIREBASE_URL")
+FIREBASE_STORAGE_BUCKET = os.environ.get("FIREBASE_STORAGE_BUCKET")
 NAMECARD_PATH = "namecard"
 
 # =====================

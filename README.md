@@ -15,6 +15,7 @@
     *   **新增/修改記事**：為每張名片添加備忘錄。
     *   **即時編輯**：如果 AI 辨識有誤，可直接在 LINE 中點擊按鈕修改錯誤的欄位。
     *   **關鍵字查詢**：輸入關鍵字（如公司或姓名）即可快速找到相關名片。
+*   **📥 一鍵加入通訊錄**：點擊名片上的「加入通訊錄」按鈕，即可獲得 QR Code，用手機相機掃描後直接匯入聯絡人到手機通訊錄（支援 iPhone/Android）。
 *   **簡易指令互動**：
     *   `list`：列出資料庫中所有的名片。
     *   `remove`：清除重複的名片資料。
@@ -43,7 +44,7 @@
       --platform managed \
       --region asia-east1 \
       --allow-unauthenticated \
-      --set-env-vars "ChannelSecret=YOUR_CHANNEL_SECRET,ChannelAccessToken=YOUR_CHANNEL_ACCESS_TOKEN,GEMINI_API_KEY=YOUR_GEMINI_API_KEY,FIREBASE_URL=YOUR_FIREBASE_URL,GOOGLE_APPLICATION_CREDENTIALS_JSON=YOUR_FIREBASE_SERVICE_ACCOUNT_JSON"
+      --set-env-vars "ChannelSecret=YOUR_CHANNEL_SECRET,ChannelAccessToken=YOUR_CHANNEL_ACCESS_TOKEN,GEMINI_API_KEY=YOUR_GEMINI_API_KEY,FIREBASE_URL=YOUR_FIREBASE_URL,FIREBASE_STORAGE_BUCKET=YOUR_PROJECT_ID.appspot.com,GOOGLE_APPLICATION_CREDENTIALS_JSON=YOUR_FIREBASE_SERVICE_ACCOUNT_JSON"
     ```
     部署成功後，GCP 會提供一個服務網址 (Service URL)，這就是您的 LINE Bot Webhook URL。
 
@@ -55,6 +56,7 @@
 *   `ChannelAccessToken`：**[必要]** LINE Channel 的 **Channel access token**。同樣在 LINE Developers Console 中取得。
 *   `GEMINI_API_KEY`：**[必要]** 您的 Google Gemini API 金鑰。您可以從 [Google AI Studio](https://aistudio.google.com/app/apikey) 取得。
 *   `FIREBASE_URL`：**[必要]** 您的 Firebase Realtime Database 網址。格式通常是 `https://{your-project-id}-default-rtdb.firebaseio.com/`。
+*   `FIREBASE_STORAGE_BUCKET`：**[必要]** 您的 Firebase Storage Bucket 名稱。格式通常是 `{your-project-id}.appspot.com`。用於儲存 QR Code 圖片。請確保 Firebase Storage 已啟用，並且服務帳戶有寫入權限。
 *   `GOOGLE_APPLICATION_CREDENTIALS_JSON`：**[必要]** Firebase 服務帳戶的金鑰 (JSON 格式)。
     1.  前往您的 Firebase 專案設定 -> `服務帳戶`。
     2.  點擊「產生新的私密金鑰」並下載 JSON 檔案。

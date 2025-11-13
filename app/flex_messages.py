@@ -80,30 +80,51 @@ def get_namecard_flex_msg(card_data: dict, card_id: str) -> FlexSendMessage:
         },
         "footer": {
             "type": "box",
-            "layout": "horizontal",
+            "layout": "vertical",
             "spacing": "sm",
             "contents": [
                 {
-                    "type": "button",
-                    "style": "link",
-                    "height": "sm",
-                    "action": {
-                        "type": "postback",
-                        "label": "新增/修改記事",
-                        "data": f"action=add_memo&card_id={card_id}",
-                        "displayText": f"我想為 {name} 新增記事"
-                    }
+                    "type": "box",
+                    "layout": "horizontal",
+                    "spacing": "sm",
+                    "contents": [
+                        {
+                            "type": "button",
+                            "style": "link",
+                            "height": "sm",
+                            "action": {
+                                "type": "postback",
+                                "label": "新增/修改記事",
+                                "data": f"action=add_memo&card_id={card_id}",
+                                "displayText": f"我想為 {name} 新增記事"
+                            },
+                            "flex": 1
+                        },
+                        {
+                            "type": "button",
+                            "style": "link",
+                            "height": "sm",
+                            "action": {
+                                "type": "postback",
+                                "label": "編輯資料",
+                                "data": f"action=edit_card&card_id={card_id}",
+                                "displayText": f"我想編輯 {name} 的名片"
+                            },
+                            "flex": 1
+                        }
+                    ]
                 },
                 {
                     "type": "button",
-                    "style": "link",
+                    "style": "primary",
                     "height": "sm",
                     "action": {
                         "type": "postback",
-                        "label": "編輯資料",
-                        "data": f"action=edit_card&card_id={card_id}",
-                        "displayText": f"我想編輯 {name} 的名片"
-                    }
+                        "label": "📥 加入通訊錄",
+                        "data": f"action=download_contact&card_id={card_id}",
+                        "displayText": f"下載 {name} 的聯絡人資訊"
+                    },
+                    "margin": "sm"
                 }
             ]
         },

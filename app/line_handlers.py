@@ -1,10 +1,10 @@
 from urllib.parse import parse_qsl
-from linebot.models import PostbackEvent, MessageEvent, TextSendMessage
+from linebot.models import PostbackEvent, MessageEvent, TextSendMessage, ImageSendMessage
 from io import BytesIO
 import PIL.Image
 import json
 
-from . import firebase_utils, gemini_utils, utils, flex_messages, config
+from . import firebase_utils, gemini_utils, utils, flex_messages, config, qrcode_utils
 from .bot_instance import line_bot_api, user_states
 
 FIELD_LABELS = {
@@ -45,6 +45,55 @@ async def handle_postback_event(event: PostbackEvent, user_id: str):
         reply_text = f"請輸入「{card_name}」的新「{field_label}」："
         await line_bot_api.reply_message(
             event.reply_token, TextSendMessage(text=reply_text))
+
+    elif action == 'download_contact':
+        await handle_download_contact(event, user_id, card_id, card_name)
+
+
+async def handle_download_contact(
+        event: PostbackEvent, user_id: str, card_id: str, card_name: str):
+    """處理下載聯絡人 QR Code 的請求"""
+    try:
+        # 從 Firebase 取得完整的名片資料
+        card_data = firebase_utils.get_card_by_id(user_id, card_id)
+        if not card_data:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text='找不到該名片資料。'))
+            return
+
+        # 生成 vCard QR Code
+        qrcode_image = qrcode_utils.generate_vcard_qrcode(card_data)
+
+        # 上傳到 Firebase Storage 並取得 URL
+        image_url = firebase_utils.upload_qrcode_to_storage(
+            qrcode_image, user_id, card_id)
+
+        if not image_url:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text='生成 QR Code 時發生錯誤，請稍後再試。'))
+            return
+
+        # 生成使用說明
+        instruction_text = qrcode_utils.get_qrcode_usage_instruction(card_name)
+
+        # 回傳 QR Code 圖片和使用說明
+        image_message = ImageSendMessage(
+            original_content_url=image_url,
+            preview_image_url=image_url
+        )
+        text_message = TextSendMessage(text=instruction_text)
+
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [image_message, text_message])
+
+    except Exception as e:
+        print(f"Error in handle_download_contact: {e}")
+        await line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text='處理您的請求時發生錯誤，請稍後再試。'))
 
 
 async def handle_text_event(event: MessageEvent, user_id: str) -> None:

@@ -5,4 +5,5 @@ google.generativeai
 pydantic
 tiktoken
 Pillow
+qrcode[pil]
 firebase-admin

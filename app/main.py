@@ -17,9 +17,16 @@ from .bot_instance import close_session, parser
 # =====================
 
 # Firebase 初始化
+firebase_config = {
+    "databaseURL": config.FIREBASE_URL,
+}
+# 如果設定了 Storage Bucket，則加入配置
+if config.FIREBASE_STORAGE_BUCKET:
+    firebase_config["storageBucket"] = config.FIREBASE_STORAGE_BUCKET
+
 try:
     cred = credentials.ApplicationDefault()
-    firebase_admin.initialize_app(cred, {"databaseURL": config.FIREBASE_URL})
+    firebase_admin.initialize_app(cred, firebase_config)
     print("Firebase Admin SDK initialized successfully.")
 except Exception as e:
     # 在 Heroku 上，GOOGLE_APPLICATION_CREDENTIALS 可能不是一個有效的檔案路徑
@@ -28,8 +35,7 @@ except Exception as e:
     if gac_str:
         cred_json = json.loads(gac_str)
         cred = credentials.Certificate(cred_json)
-        firebase_admin.initialize_app(
-            cred, {"databaseURL": config.FIREBASE_URL})
+        firebase_admin.initialize_app(cred, firebase_config)
         print("Firebase Admin SDK initialized successfully from ENV VAR.")
     else:
         print(f"Firebase initialization failed: {e}")

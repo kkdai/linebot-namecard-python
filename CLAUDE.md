@@ -15,14 +15,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Google Cloud Platform Deployment
 - **Build and push to GCP**: `gcloud builds submit --tag gcr.io/{PROJECT_ID}/{IMAGE_NAME}`
-- **Deploy to Cloud Run**: 
+- **Deploy to Cloud Run**:
   ```bash
   gcloud run deploy {IMAGE_NAME} \
     --image gcr.io/{PROJECT_ID}/{IMAGE_NAME} \
     --platform managed \
     --region asia-east1 \
     --allow-unauthenticated \
-    --set-env-vars "ChannelSecret=YOUR_CHANNEL_SECRET,ChannelAccessToken=YOUR_CHANNEL_ACCESS_TOKEN,GEMINI_API_KEY=YOUR_GEMINI_API_KEY,FIREBASE_URL=YOUR_FIREBASE_URL,GOOGLE_APPLICATION_CREDENTIALS_JSON=YOUR_FIREBASE_SERVICE_ACCOUNT_JSON"
+    --set-env-vars "ChannelSecret=YOUR_CHANNEL_SECRET,ChannelAccessToken=YOUR_CHANNEL_ACCESS_TOKEN,GEMINI_API_KEY=YOUR_GEMINI_API_KEY,FIREBASE_URL=YOUR_FIREBASE_URL,FIREBASE_STORAGE_BUCKET=YOUR_PROJECT_ID.firebasestorage.app,GOOGLE_APPLICATION_CREDENTIALS_JSON=YOUR_FIREBASE_SERVICE_ACCOUNT_JSON"
   ```
 
 ## Architecture
@@ -34,7 +34,8 @@ This is a LINE Bot application that processes business card images using Google'
 - **app/main.py**: FastAPI entry point with webhook handler for LINE Bot
 - **app/line_handlers.py**: Handles different LINE message types (text, image, postback)
 - **app/gemini_utils.py**: Gemini Pro API integration for image OCR and text processing
-- **app/firebase_utils.py**: Firebase Realtime Database operations
+- **app/firebase_utils.py**: Firebase Realtime Database and Storage operations
+- **app/qrcode_utils.py**: vCard QR Code generation utilities
 - **app/flex_messages.py**: LINE Flex Message templates for rich card displays
 - **app/bot_instance.py**: LINE Bot API client and session management
 - **app/config.py**: Environment configuration and validation
@@ -45,6 +46,7 @@ This is a LINE Bot application that processes business card images using Google'
 2. **Data Storage**: Structured namecard data → Firebase Realtime Database under `namecard/{user_id}/`
 3. **Smart Query**: Text queries → Gemini Pro text model → relevant namecard search
 4. **Interactive Editing**: Postback events → field editing states → database updates
+5. **QR Code Generation**: Namecard data → vCard format → QR Code image → Firebase Storage → LINE ImageMessage
 
 ### Key Features
 
@@ -53,20 +55,22 @@ This is a LINE Bot application that processes business card images using Google'
 - **Interactive Editing**: Users can edit individual fields through LINE interface
 - **Smart Search**: Natural language queries to find relevant business cards
 - **Memo System**: Add notes to business cards
+- **vCard QR Code Export**: Generate QR Code for direct import to phone contacts (iPhone/Android)
 - **State Management**: Tracks user interaction states for multi-step operations
 
 ### Environment Variables
 
 Required for deployment:
 - `ChannelSecret`: LINE Channel secret
-- `ChannelAccessToken`: LINE Channel access token  
+- `ChannelAccessToken`: LINE Channel access token
 - `GEMINI_API_KEY`: Google Gemini API key
 - `FIREBASE_URL`: Firebase Realtime Database URL
+- `FIREBASE_STORAGE_BUCKET`: Firebase Storage bucket name (e.g., `project-id.firebasestorage.app`)
 - `GOOGLE_APPLICATION_CREDENTIALS_JSON`: Firebase service account JSON (as string)
 
 ### Database Structure
 
-Firebase Realtime Database stores data under:
+**Firebase Realtime Database** stores namecard data:
 ```
 namecard/
   {user_id}/
@@ -78,6 +82,36 @@ namecard/
       phone: string
       email: string
       memo?: string
+```
+
+**Firebase Storage** stores QR Code images:
+```
+qrcodes/
+  {user_id}/
+    {card_id}.png
+```
+
+### QR Code Implementation
+
+**vCard Format** (app/qrcode_utils.py):
+- Generates vCard 3.0 format string from namecard data
+- Handles special character escaping (newlines, commas, semicolons)
+- Includes all fields: name, title, company, phone, email, address, memo
+
+**QR Code Generation**:
+- Uses `qrcode` Python library
+- Parameters: `version=None` (auto), `error_correction=L`, `box_size=10`, `border=2`
+- Returns BytesIO object containing PNG image
+
+**Firebase Storage Upload** (app/firebase_utils.py):
+- Uploads QR Code to `qrcodes/{user_id}/{card_id}.png`
+- Sets image as publicly readable via `blob.make_public()`
+- Returns public URL for LINE ImageMessage
+
+**Storage Rules**:
+```javascript
+allow read: if true;   // Public read for QR Code images
+allow write: if false; // Only Admin SDK can write
 ```
 
 ### Testing Commands

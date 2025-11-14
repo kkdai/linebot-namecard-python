@@ -15,11 +15,98 @@
     *   **新增/修改記事**：為每張名片添加備忘錄。
     *   **即時編輯**：如果 AI 辨識有誤，可直接在 LINE 中點擊按鈕修改錯誤的欄位。
     *   **關鍵字查詢**：輸入關鍵字（如公司或姓名）即可快速找到相關名片。
-*   **📥 一鍵加入通訊錄**：點擊名片上的「加入通訊錄」按鈕，即可獲得 QR Code，用手機相機掃描後直接匯入聯絡人到手機通訊錄（支援 iPhone/Android）。
+*   **📥 一鍵加入通訊錄**：點擊名片上的「加入通訊錄」按鈕，即可獲得 vCard QR Code，用手機相機掃描後直接匯入聯絡人到手機通訊錄（支援 iPhone/Android）。
 *   **簡易指令互動**：
     *   `list`：列出資料庫中所有的名片。
     *   `remove`：清除重複的名片資料。
     *   `test`：產生一張測試用的名片，方便您預覽卡片樣式。
+
+## 📱 QR Code 名片匯入功能
+
+### 功能特色
+
+本專案整合了 **vCard QR Code** 生成功能，讓您可以將數位化的名片資料快速加入手機通訊錄，無需手動逐一輸入。
+
+### 使用流程
+
+1. **上傳名片圖片** → Gemini Pro Vision API 自動辨識
+2. **查看名片資訊** → 在 LINE 中顯示精美的 Flex Message
+3. **點擊「📥 加入通訊錄」按鈕**
+4. **收到 QR Code 圖片** → Bot 自動生成並發送
+5. **用手機相機掃描** → 系統自動識別 vCard 格式
+6. **點擊「加入聯絡人」** → 完成匯入 ✅
+
+### 技術實作
+
+#### vCard 標準格式
+- 使用 **vCard 3.0** 標準格式（iPhone/Android 原生支援）
+- 包含完整資訊：姓名、職稱、公司、電話、Email、地址、備註
+- 自動處理特殊字元轉義，確保資料正確性
+
+#### QR Code 生成
+- 使用 Python `qrcode` 套件生成 PNG 圖片
+- 優化參數設定，確保手機相機可快速掃描
+- 自動調整 QR Code 大小，適應不同資料量
+
+#### Firebase Storage 整合
+- QR Code 圖片自動上傳到 Firebase Storage
+- 檔案路徑：`qrcodes/{user_id}/{card_id}.png`
+- 圖片設為公開可讀取，透過 HTTPS URL 提供
+- 使用 Firebase Admin SDK，安全且高效
+
+### 技術架構
+
+```
+使用者上傳名片
+    ↓
+Gemini Vision API 辨識
+    ↓
+儲存到 Firebase Realtime Database
+    ↓
+點擊「加入通訊錄」按鈕
+    ↓
+生成 vCard 格式字串
+    ↓
+編碼為 QR Code (PNG)
+    ↓
+上傳到 Firebase Storage
+    ↓
+回傳圖片 URL 給使用者
+    ↓
+掃描加入通訊錄 ✅
+```
+
+### 相容性
+
+| 平台 | 支援情況 | 說明 |
+|------|---------|------|
+| **iPhone** | ✅ 完整支援 | 相機 App 自動識別，直接提示「加入聯絡人」 |
+| **Android** | ✅ 完整支援 | Google Lens 或相機掃描後可匯入 |
+| **LINE 內建掃描器** | ✅ 支援 | 可正常掃描並開啟連結 |
+
+### Firebase Storage 設定
+
+#### Storage Rules 建議設定
+
+為了確保安全性，建議使用以下 Firebase Storage Rules：
+
+```javascript
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read: if true;   // 允許公開讀取 QR Code
+      allow write: if false; // 禁止客戶端寫入（只有 Admin SDK 能寫）
+    }
+  }
+}
+```
+
+**為什麼這樣安全？**
+- ✅ Cloud Run 使用 Firebase Admin SDK，擁有完整權限（繞過 Rules）
+- ✅ QR Code 圖片可以被任何人透過 URL 讀取（符合需求）
+- ✅ 禁止客戶端寫入，防止惡意上傳
 
 ## 🚀 如何部署到 GCP (Google Cloud Platform)
 

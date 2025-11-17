@@ -121,6 +121,18 @@ async def handle_text_event(event: MessageEvent, user_id: str) -> None:
             event.reply_token,
             [TextSendMessage(text="Redundant data removal complete.")],
         )
+    elif msg == "stats":
+        stats = firebase_utils.get_namecard_statistics(user_id)
+        stats_text = f"""📊 名片統計資訊
+
+📇 總名片數：{stats['total']} 張
+📅 本月新增：{stats['this_month']} 張
+🏢 最常合作公司：{stats['top_company']}"""
+
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [TextSendMessage(text=stats_text)]
+        )
     else:
         await handle_smart_query(event, user_id, msg)
 

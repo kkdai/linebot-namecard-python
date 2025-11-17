@@ -1,7 +1,8 @@
 from firebase_admin import db, storage
 from . import config
 from io import BytesIO
-from datetime import timedelta
+from datetime import timedelta, datetime
+from collections import Counter
 
 
 def get_all_cards(u_id: str) -> dict:
@@ -18,6 +19,9 @@ def get_all_cards(u_id: str) -> dict:
 def add_namecard(namecard_obj: dict, u_id: str) -> str:
     """新增名片資料到 Firebase 並回傳 card_id"""
     try:
+        # 加入建立時間戳記
+        namecard_obj['created_at'] = datetime.now().isoformat()
+
         ref = db.reference(f"{config.NAMECARD_PATH}/{u_id}")
         new_card_ref = ref.push(namecard_obj)
         return new_card_ref.key  # 回傳新資料的唯一 ID
@@ -138,3 +142,72 @@ def upload_qrcode_to_storage(
     except Exception as e:
         print(f"Error uploading QR code to storage: {e}")
         return None
+
+
+def get_namecard_statistics(u_id: str) -> dict:
+    """
+    取得名片統計資訊
+
+    Returns:
+        {
+            "total": 總名片數,
+            "this_month": 本月新增數量,
+            "top_company": 最常聯絡公司名稱
+        }
+    """
+    try:
+        all_cards = get_all_cards(u_id)
+        if not all_cards:
+            return {
+                "total": 0,
+                "this_month": 0,
+                "top_company": "無"
+            }
+
+        # 1. 計算總數
+        total = len(all_cards)
+
+        # 2. 計算本月新增
+        now = datetime.now()
+        this_month_count = 0
+
+        for card in all_cards.values():
+            created_at = card.get('created_at')
+            if created_at:  # 只計算有時間戳的名片
+                try:
+                    created_date = datetime.fromisoformat(created_at)
+                    if (created_date.year == now.year
+                            and created_date.month == now.month):
+                        this_month_count += 1
+                except ValueError:
+                    continue  # 忽略格式錯誤的時間戳
+
+        # 3. 找出最常聯絡公司（名片數量最多的公司）
+        companies = [
+            card.get('company', '').strip()
+            for card in all_cards.values()
+            if card.get('company')
+            and card.get('company') != 'N/A'
+            and card.get('company').strip()
+        ]
+
+        if companies:
+            company_counter = Counter(companies)
+            top_company, count = company_counter.most_common(1)[0]
+            top_company = f"{top_company} ({count}張)"
+        else:
+            top_company = "無"
+
+        return {
+            "total": total,
+            "this_month": this_month_count,
+            "top_company": top_company
+        }
+
+    except Exception as e:
+        print(f"Error getting statistics: {e}")
+        return {
+            "total": 0,
+            "this_month": 0,
+            "top_company": "無"
+        }

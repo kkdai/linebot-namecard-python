@@ -1,5 +1,8 @@
 from urllib.parse import parse_qsl
-from linebot.models import PostbackEvent, MessageEvent, TextSendMessage, ImageSendMessage
+from linebot.models import (
+    PostbackEvent, MessageEvent, TextSendMessage, ImageSendMessage,
+    QuickReply, QuickReplyButton, PostbackAction
+)
 from io import BytesIO
 import PIL.Image
 import json
@@ -13,11 +16,90 @@ FIELD_LABELS = {
 }
 
 
+def get_quick_reply_items():
+    """建立常用功能的 Quick Reply 按鈕"""
+    return QuickReply(items=[
+        QuickReplyButton(
+            action=PostbackAction(
+                label="📊 統計",
+                data="action=show_stats"
+            )
+        ),
+        QuickReplyButton(
+            action=PostbackAction(
+                label="📋 列表",
+                data="action=show_list"
+            )
+        ),
+        QuickReplyButton(
+            action=PostbackAction(
+                label="🧪 測試",
+                data="action=show_test"
+            )
+        ),
+        QuickReplyButton(
+            action=PostbackAction(
+                label="ℹ️ 說明",
+                data="action=show_help"
+            )
+        )
+    ])
+
+
 async def handle_postback_event(event: PostbackEvent, user_id: str):
     postback_data = dict(parse_qsl(event.postback.data))
     action = postback_data.get('action')
     card_id = postback_data.get('card_id')
 
+    # 處理功能性 action（不需要 card_id）
+    if action == 'show_stats':
+        stats = firebase_utils.get_namecard_statistics(user_id)
+        stats_text = f"""📊 名片統計資訊
+
+📇 總名片數：{stats['total']} 張
+📅 本月新增：{stats['this_month']} 張
+🏢 最常合作公司：{stats['top_company']}"""
+        await line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=stats_text, quick_reply=get_quick_reply_items())
+        )
+        return
+
+    elif action == 'show_list':
+        all_cards = firebase_utils.get_all_cards(user_id)
+        list_text = f"📋 總共有 {len(all_cards)} 張名片資料。"
+        await line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=list_text, quick_reply=get_quick_reply_items())
+        )
+        return
+
+    elif action == 'show_test':
+        test_namecard = utils.generate_sample_namecard()
+        reply_card_msg = flex_messages.get_namecard_flex_msg(
+            test_namecard, "test_card_id")
+        await line_bot_api.reply_message(event.reply_token, [reply_card_msg])
+        return
+
+    elif action == 'show_help':
+        help_text = """ℹ️ 名片管理機器人使用說明
+
+📸 上傳名片圖片 → 自動辨識並儲存
+🔍 輸入文字 → 智能搜尋相關名片
+📊 統計 → 查看名片統計資訊
+📋 列表 → 顯示名片總數
+🧪 測試 → 查看範例名片
+
+💡 小提示：
+• 點擊名片可以編輯、加入備註
+• 使用「加入通訊錄」可下載 QR Code"""
+        await line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(text=help_text, quick_reply=get_quick_reply_items())
+        )
+        return
+
+    # 處理需要 card_id 的 action
     card_name = firebase_utils.get_name_from_card(user_id, card_id)
     if not card_name:
         await line_bot_api.reply_message(
@@ -104,34 +186,14 @@ async def handle_text_event(event: MessageEvent, user_id: str) -> None:
         await handle_add_memo_state(event, user_id, msg)
     elif user_action == 'editing_field':
         await handle_edit_field_state(event, user_id, msg)
-    elif msg == "test":
-        test_namecard = utils.generate_sample_namecard()
-        reply_card_msg = flex_messages.get_namecard_flex_msg(
-            test_namecard, "test_card_id")
-        await line_bot_api.reply_message(event.reply_token, [reply_card_msg])
-    elif msg == "list":
-        all_cards = firebase_utils.get_all_cards(user_id)
-        await line_bot_api.reply_message(
-            event.reply_token,
-            [TextSendMessage(text=f"總共有 {len(all_cards)} 張名片資料。")],
-        )
     elif msg == "remove":
         firebase_utils.remove_redundant_data(user_id)
         await line_bot_api.reply_message(
             event.reply_token,
-            [TextSendMessage(text="Redundant data removal complete.")],
-        )
-    elif msg == "stats":
-        stats = firebase_utils.get_namecard_statistics(user_id)
-        stats_text = f"""📊 名片統計資訊
-
-📇 總名片數：{stats['total']} 張
-📅 本月新增：{stats['this_month']} 張
-🏢 最常合作公司：{stats['top_company']}"""
-
-        await line_bot_api.reply_message(
-            event.reply_token,
-            [TextSendMessage(text=stats_text)]
+            [TextSendMessage(
+                text="Redundant data removal complete.",
+                quick_reply=get_quick_reply_items()
+            )],
         )
     else:
         await handle_smart_query(event, user_id, msg)
@@ -143,11 +205,18 @@ async def handle_add_memo_state(event: MessageEvent, user_id: str, msg: str):
 
     if firebase_utils.update_namecard_memo(card_id, user_id, msg):
         await line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(text='備忘錄已成功更新！'))
+            event.reply_token,
+            TextSendMessage(
+                text='備忘錄已成功更新！',
+                quick_reply=get_quick_reply_items()
+            ))
     else:
         await line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(
-                text='新增備忘錄時發生錯誤，請稍後再試。'))
+            event.reply_token,
+            TextSendMessage(
+                text='新增備忘錄時發生錯誤，請稍後再試。',
+                quick_reply=get_quick_reply_items()
+            ))
     del user_states[user_id]
 
 
@@ -163,15 +232,25 @@ async def handle_edit_field_state(event: MessageEvent, user_id: str, msg: str):
                 updated_card, card_id)
             await line_bot_api.reply_message(
                 event.reply_token,
-                [TextSendMessage(text='資料已成功更新！'), reply_msg]
+                [TextSendMessage(
+                    text='資料已成功更新！',
+                    quick_reply=get_quick_reply_items()
+                ), reply_msg]
             )
         else:
             await line_bot_api.reply_message(
-                event.reply_token, TextSendMessage(text='資料更新成功，但無法立即顯示。'))
+                event.reply_token,
+                TextSendMessage(
+                    text='資料更新成功，但無法立即顯示。',
+                    quick_reply=get_quick_reply_items()
+                ))
     else:
         await line_bot_api.reply_message(
-            event.reply_token, TextSendMessage(
-                text='更新資料時發生錯誤，請稍後再試。'))
+            event.reply_token,
+            TextSendMessage(
+                text='更新資料時發生錯誤，請稍後再試。',
+                quick_reply=get_quick_reply_items()
+            ))
     del user_states[user_id]
 
 
@@ -179,7 +258,11 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
     all_cards_dict = firebase_utils.get_all_cards(user_id)
     if not all_cards_dict:
         await line_bot_api.reply_message(
-            event.reply_token, [TextSendMessage(text="您尚未建立任何名片。")])
+            event.reply_token,
+            [TextSendMessage(
+                text="您尚未建立任何名片。",
+                quick_reply=get_quick_reply_items()
+            )])
         return
 
     all_cards_list = []
@@ -218,7 +301,10 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
         else:
             await line_bot_api.reply_message(
                 event.reply_token,
-                [TextSendMessage(text="查無相關名片資料。")],
+                [TextSendMessage(
+                    text="查無相關名片資料。",
+                    quick_reply=get_quick_reply_items()
+                )],
             )
 
     except Exception as e:
@@ -266,16 +352,26 @@ async def handle_image_event(event: MessageEvent, user_id: str) -> None:
             existing_card_data, existing_card_id)
         await line_bot_api.reply_message(
             event.reply_token,
-            [TextSendMessage(text="這個名片已經存在資料庫中。"), reply_msg],
+            [TextSendMessage(
+                text="這個名片已經存在資料庫中。",
+                quick_reply=get_quick_reply_items()
+            ), reply_msg],
         )
         return
 
     card_id = firebase_utils.add_namecard(card_obj, user_id)
     if card_id:
         reply_msg = flex_messages.get_namecard_flex_msg(card_obj, card_id)
-        chinese_reply_msg = TextSendMessage(text="名片資料已經成功加入資料庫。")
+        chinese_reply_msg = TextSendMessage(
+            text="名片資料已經成功加入資料庫。",
+            quick_reply=get_quick_reply_items()
+        )
         await line_bot_api.reply_message(
             event.reply_token, [reply_msg, chinese_reply_msg])
     else:
         await line_bot_api.reply_message(
-            event.reply_token, [TextSendMessage(text="儲存名片時發生錯誤。")])
+            event.reply_token,
+            [TextSendMessage(
+                text="儲存名片時發生錯誤。",
+                quick_reply=get_quick_reply_items()
+            )])

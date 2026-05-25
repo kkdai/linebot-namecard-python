@@ -10,7 +10,8 @@ CHANNEL_ACCESS_TOKEN = os.getenv("ChannelAccessToken", None)
 # =====================
 # API 金鑰設定
 # =====================
-GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+PROJECT_ID = os.getenv("PROJECT_ID", None)
+LOCATION = os.getenv("LOCATION", "global")
 
 # =====================
 # Firebase 設定
@@ -39,8 +40,8 @@ if CHANNEL_SECRET is None:
 if CHANNEL_ACCESS_TOKEN is None:
     print("Specify ChannelAccessToken as environment variable.")
     sys.exit(1)
-if GEMINI_KEY is None:
-    print("Specify GEMINI_API_KEY as environment variable.")
+if PROJECT_ID is None:
+    print("Specify PROJECT_ID as environment variable.")
     sys.exit(1)
 if FIREBASE_URL is None:
     print("Specify FIREBASE_URL as environment variable.")

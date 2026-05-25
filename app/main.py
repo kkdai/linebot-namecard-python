@@ -1,7 +1,6 @@
 from fastapi import Request, FastAPI, HTTPException
 from linebot.models import MessageEvent, PostbackEvent
 from linebot.exceptions import InvalidSignatureError
-import google.generativeai as genai
 import firebase_admin
 from firebase_admin import credentials
 import os
@@ -41,9 +40,6 @@ except Exception as e:
         print(f"Firebase initialization failed: {e}")
         # 可以選擇在這裡 sys.exit(1) 或讓程式繼續，但 Firebase 功能會失效
 
-
-# Gemini 初始化
-genai.configure(api_key=config.GEMINI_KEY)
 
 # FastAPI 初始化
 app = FastAPI()

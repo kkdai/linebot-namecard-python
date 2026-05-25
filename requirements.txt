@@ -1,9 +1,11 @@
 line-bot-sdk==3.5.0
 fastapi
 uvicorn[standard]
-google.generativeai
-pydantic
+google-cloud-aiplatform
+pydantic==2.13.4
+pydantic-settings==2.14.1
 tiktoken
 Pillow
 qrcode[pil]
 firebase-admin
+google-adk==1.19.0

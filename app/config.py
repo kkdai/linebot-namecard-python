@@ -1,6 +1,10 @@
 import os
 import sys
 
+# Force GOOGLE_CLOUD_LOCATION to global so that Vertex AI and ADK look
+# for models in the global region
+os.environ["GOOGLE_CLOUD_LOCATION"] = "global"
+
 # =====================
 # LINE Bot 設定
 # =====================

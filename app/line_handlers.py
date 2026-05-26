@@ -5,10 +5,15 @@ from linebot.models import (
 )
 from io import BytesIO
 import PIL.Image
-import json
 
-from . import firebase_utils, gemini_utils, utils, flex_messages, config, qrcode_utils
+from . import (
+    firebase_utils, gemini_utils, utils, flex_messages, config, qrcode_utils
+)
 from .bot_instance import line_bot_api, user_states
+from google.adk import Agent, Runner
+from google.adk.sessions.in_memory_session_service import (
+    InMemorySessionService
+)
 
 FIELD_LABELS = {
     "name": "姓名", "title": "職稱", "company": "公司",
@@ -61,7 +66,9 @@ async def handle_postback_event(event: PostbackEvent, user_id: str):
 🏢 最常合作公司：{stats['top_company']}"""
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=stats_text, quick_reply=get_quick_reply_items())
+            TextSendMessage(
+                text=stats_text, quick_reply=get_quick_reply_items()
+            ),
         )
         return
 
@@ -70,7 +77,9 @@ async def handle_postback_event(event: PostbackEvent, user_id: str):
         list_text = f"📋 總共有 {len(all_cards)} 張名片資料。"
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=list_text, quick_reply=get_quick_reply_items())
+            TextSendMessage(
+                text=list_text, quick_reply=get_quick_reply_items()
+            ),
         )
         return
 
@@ -95,7 +104,9 @@ async def handle_postback_event(event: PostbackEvent, user_id: str):
 • 使用「加入通訊錄」可下載 QR Code"""
         await line_bot_api.reply_message(
             event.reply_token,
-            TextSendMessage(text=help_text, quick_reply=get_quick_reply_items())
+            TextSendMessage(
+                text=help_text, quick_reply=get_quick_reply_items()
+            ),
         )
         return
 
@@ -254,64 +265,123 @@ async def handle_edit_field_state(event: MessageEvent, user_id: str, msg: str):
     del user_states[user_id]
 
 
+def make_adk_tools(user_id: str, found_card_ids: list):
+    """為特定使用者動態建立專屬的 Firebase 資料存取與操作工具"""
+    def get_all_namecards() -> list[dict]:
+        """取得當前使用者在 Firebase 資料庫中所有的名片資料列表。
+        每張名片資料都包含唯一的 card_id 欄位。"""
+        cards_dict = firebase_utils.get_all_cards(user_id)
+        all_cards_list = []
+        for card_id, card_data in cards_dict.items():
+            card_data_with_id = card_data.copy()
+            card_data_with_id['card_id'] = card_id
+            all_cards_list.append(card_data_with_id)
+        return all_cards_list
+
+    def get_namecard_by_id(card_id: str) -> dict:
+        """透過特定的 card_id 取得單張名片的詳細欄位與資料。"""
+        return firebase_utils.get_card_by_id(user_id, card_id)
+
+    def display_namecard(card_id: str) -> str:
+        """顯示特定名片給使用者看。
+        當找到與搜尋相匹配的名片時，務必調用此工具。"""
+        if card_id not in found_card_ids:
+            found_card_ids.append(card_id)
+        return f"已將名片 ID 標記為顯示：{card_id}"
+
+    def update_namecard_memo(card_id: str, memo: str) -> bool:
+        """更新特定名片的備忘錄／記事資訊。"""
+        return firebase_utils.update_namecard_memo(card_id, user_id, memo)
+
+    def update_namecard_field(card_id: str, field: str, value: str) -> bool:
+        """更新特定名片的指定欄位（可選欄位有：name、title、company、address、phone、email）。"""
+        return firebase_utils.update_namecard_field(
+            user_id, card_id, field, value
+        )
+
+    return [
+        get_all_namecards,
+        get_namecard_by_id,
+        display_namecard,
+        update_namecard_memo,
+        update_namecard_field
+    ]
+
+
 async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
-    all_cards_dict = firebase_utils.get_all_cards(user_id)
-    if not all_cards_dict:
+    found_card_ids = []
+    tools = make_adk_tools(user_id, found_card_ids)
+
+    agent = Agent(
+        name="namecard_agent",
+        model="gemini-3-flash-preview",
+        instruction=(
+            "你是一個聰明且親切的 LINE 名片助理。你的工作是幫助使用者管理名片資料。\n"
+            "你可以使用合適的工具來讀取或修改 Firebase 資料庫中的名片記錄。\n\n"
+            "【核心操作準則】\n"
+            "1. 【查詢】當使用者查詢某人或某公司的名片時，"
+            "請先調用 get_all_namecards 取得所有資料，並在背後進行分析比對。\n"
+            "2. 【顯示】只要找到了符合條件的名片，"
+            "『務必』調用 display_namecard 工具將該名片的 card_id "
+            "標記為顯示，以便系統繪製並呈現在 LINE 畫面上。\n"
+            "3. 【修改】如果使用者想修改名片（例如電話、Email、備註），"
+            "請先比對找出 card_id，然後調用相對應的更新工具"
+            "（如 update_namecard_field 或 update_namecard_memo）"
+            "進行修改，修改成功後請『務必』再次調用 display_namecard "
+            "顯示更新後的名片，讓使用者進行確認。\n"
+            "4. 【回覆】最後請以親切、精簡的繁體中文口吻"
+            "向使用者回覆操作結果或搜尋進度。"
+        ),
+        tools=tools,
+    )
+
+    runner = Runner(
+        app_name="namecard_bot_app",
+        agent=agent,
+        session_service=InMemorySessionService()
+    )
+
+    try:
+        events = await runner.run_debug(
+            msg, user_id=user_id, session_id=user_id
+        )
+
+        # 組合 Agent 的文字回覆
+        final_text = ""
+        for ev in events:
+            if ev.content and ev.content.parts:
+                for part in ev.content.parts:
+                    if part.text:
+                        final_text += part.text
+
+        final_text = final_text.strip()
+        if not final_text:
+            final_text = "為您完成處理。"
+
+        reply_msgs = [TextSendMessage(
+            text=final_text,
+            quick_reply=get_quick_reply_items()
+        )]
+
+        # 如果 Agent 有標記要顯示的名片，則附加上 Flex Message
+        if found_card_ids:
+            for card_id in found_card_ids[:5]:
+                card_data = firebase_utils.get_card_by_id(user_id, card_id)
+                if card_data:
+                    reply_msgs.append(
+                        flex_messages.get_namecard_flex_msg(card_data, card_id)
+                    )
+
+        await line_bot_api.reply_message(event.reply_token, reply_msgs)
+
+    except Exception as e:
+        print(f"Error executing ADK smart query: {e}")
         await line_bot_api.reply_message(
             event.reply_token,
             [TextSendMessage(
-                text="您尚未建立任何名片。",
+                text="處理您的查詢時發生錯誤，請稍後再試。",
                 quick_reply=get_quick_reply_items()
-            )])
-        return
-
-    all_cards_list = []
-    for card_id, card_data in all_cards_dict.items():
-        card_data_with_id = card_data.copy()
-        card_data_with_id['card_id'] = card_id
-        all_cards_list.append(card_data_with_id)
-
-    smart_query_prompt = (
-        "你是一個名片助理，以下是所有名片資料（JSON 陣列），"
-        "請根據使用者輸入的查詢，回傳最相關的一或多張名片 JSON"
-        "（只回傳 JSON 陣列，不要多餘說明）。"
-        "每張名片物件中都要包含 'card_id'.\n"
-        f"名片資料: {json.dumps(all_cards_list, ensure_ascii=False)}\n"
-        f"查詢: {msg}"
-    )
-    messages = [{"role": "user", "parts": [smart_query_prompt]}]
-
-    try:
-        response = gemini_utils.generate_gemini_text_complete(messages)
-        card_objs = utils.load_json_string_to_object(response.text)
-        if isinstance(card_objs, dict):
-            card_objs = [card_objs]
-
-        reply_msgs = []
-        if card_objs:
-            for card_obj in card_objs[:5]:
-                card_id = card_obj.get("card_id")
-                if card_id:
-                    reply_msgs.append(
-                        flex_messages.get_namecard_flex_msg(
-                            card_obj, card_id))
-
-        if reply_msgs:
-            await line_bot_api.reply_message(event.reply_token, reply_msgs)
-        else:
-            await line_bot_api.reply_message(
-                event.reply_token,
-                [TextSendMessage(
-                    text="查無相關名片資料。",
-                    quick_reply=get_quick_reply_items()
-                )],
-            )
-
-    except Exception as e:
-        print(f"Error processing LLM response: {e}")
-        await line_bot_api.reply_message(
-            event.reply_token,
-            [TextSendMessage(text="處理您的查詢時發生錯誤，請稍後再試。")],
+            )]
         )
 
 

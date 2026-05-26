@@ -376,6 +376,33 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
 
     except Exception as e:
         print(f"Error executing ADK smart query: {e}")
+        # 備援搜尋機制：當 Vertex AI 或 ADK API 異常時，自動啟用本機關鍵字過濾搜尋，確保服務不中斷
+        try:
+            all_cards_dict = firebase_utils.get_all_cards(user_id)
+            fallback_matches = []
+            if all_cards_dict:
+                for card_id, card_data in all_cards_dict.items():
+                    name = card_data.get("name", "").lower()
+                    company = card_data.get("company", "").lower()
+                    query_lower = msg.lower()
+                    if query_lower in name or query_lower in company:
+                        fallback_matches.append((card_id, card_data))
+
+            if fallback_matches:
+                reply_msgs = [TextSendMessage(
+                    text="「智慧搜尋」服務暫時無法取得，"
+                         "已自動啟用「關鍵字備援搜尋」為您找到以下相關名片：",
+                    quick_reply=get_quick_reply_items()
+                )]
+                for card_id, card_data in fallback_matches[:5]:
+                    reply_msgs.append(
+                        flex_messages.get_namecard_flex_msg(card_data, card_id)
+                    )
+                await line_bot_api.reply_message(event.reply_token, reply_msgs)
+                return
+        except Exception as fallback_err:
+            print(f"Fallback search also failed: {fallback_err}")
+
         await line_bot_api.reply_message(
             event.reply_token,
             [TextSendMessage(

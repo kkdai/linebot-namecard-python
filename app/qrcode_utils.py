@@ -3,7 +3,7 @@ QR Code generation utilities for namecard vCard export.
 """
 import qrcode
 from io import BytesIO
-from typing import Dict, Optional
+from typing import Dict
 
 
 def generate_vcard_string(namecard_data: Dict[str, str]) -> str:
@@ -29,7 +29,7 @@ def generate_vcard_string(namecard_data: Dict[str, str]) -> str:
         'BEGIN:VCARD',
         'VERSION:3.0',
         f'FN:{name}',
-        f'N:{name};;;',  # Family Name; Given Name; Additional Names; Honorific Prefixes; Honorific Suffixes
+        f'N:{name};;;',  # FN: Family Name; Given Name; Additional Names
     ]
 
     if company:
@@ -47,12 +47,16 @@ def generate_vcard_string(namecard_data: Dict[str, str]) -> str:
         vcard_lines.append(f'EMAIL;TYPE=WORK:{email}')
 
     if address:
-        # vCard address format: PO Box;Extended Address;Street;City;Region;Postal Code;Country
+        # vCard ADR: PO Box;Extended;Street;City;Region;Postal Code;Country
         vcard_lines.append(f'ADR;TYPE=WORK:;;{address};;;;')
 
     if memo:
         # Escape special characters in memo
-        escaped_memo = memo.replace('\n', '\\n').replace(',', '\\,').replace(';', '\\;')
+        escaped_memo = (
+            memo.replace('\n', '\\n')
+            .replace(',', '\\,')
+            .replace(';', '\\;')
+        )
         vcard_lines.append(f'NOTE:{escaped_memo}')
 
     vcard_lines.append('END:VCARD')

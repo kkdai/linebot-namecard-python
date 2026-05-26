@@ -1,164 +1,158 @@
-# LINE Bot 智慧名片管家
+# LINE Bot 智慧名片管家 ── 擁抱 Vertex AI ADK Tools
 
-這是一個使用 FastAPI、Firebase Realtime Database 以及 Gemini Pro API 打造的 LINE Bot 應用程式。這個機器人可以接收並處理文字與圖片訊息，從名片圖片中解析出聯絡人資訊，並將其儲存到 Firebase 中方便管理與查詢。
+這是一個基於 **FastAPI**、**Google Cloud Vertex AI**、**Agent Development Kit (ADK)** 以及 **Firebase (Realtime Database & Cloud Storage)** 打造的企業級 LINE 智慧名片管理助理。
 
-<img width="453" height="638" alt="Microsoft PowerPoint 2025-08-01 18 39 19" src="https://github.com/user-attachments/assets/918c5b9a-c114-4f1d-b003-cdceaccaf01c" />
+本專案採用最新的 AI Agent 代理人架構，利用**動態閉包 (Closures) 技術**，安全地為每位 LINE 使用者綁定專屬的資料庫操作工具（Tools）。大模型能根據使用者的自然語言輸入，自主進行多步驟決策，實現名片查詢、即時欄位編輯與備忘錄修改，並融合 **LINE Flex Message** 提供極致精美的視覺化回覆！
 
-<img width="401" height="690" alt="image" src="https://github.com/user-attachments/assets/2cb92c49-09da-4f84-80ed-c5463866a513" />
+<img width="453" height="638" alt="名片助理主介面" src="https://github.com/user-attachments/assets/918c5b9a-c114-4f1d-b003-cdceaccaf01c" />
+<img width="401" height="690" alt="vCard 匯入聯絡人" src="https://github.com/user-attachments/assets/2cb92c49-09da-4f84-80ed-c5463866a513" />
 
+---
 
-## ✨ 主要功能
+## ✨ 核心特色與功能
 
-*   **智慧名片辨識**：傳送名片圖片，Bot 會使用 Gemini Pro Vision API 自動解析圖片中的姓名、職稱、公司、電話、Email 等資訊，並轉換成結構化資料。
-*   **Firebase 資料庫整合**：所有名片資料都會安全地儲存在您的 Firebase Realtime Database 中，方便隨時存取。
-*   **互動式資料管理**：
-    *   **新增/修改記事**：為每張名片添加備忘錄。
-    *   **即時編輯**：如果 AI 辨識有誤，可直接在 LINE 中點擊按鈕修改錯誤的欄位。
-    *   **關鍵字查詢**：輸入關鍵字（如公司或姓名）即可快速找到相關名片。
-*   **📥 一鍵加入通訊錄**：點擊名片上的「加入通訊錄」按鈕，即可獲得 vCard QR Code，用手機相機掃描後直接匯入聯絡人到手機通訊錄（支援 iPhone/Android）。
-*   **簡易指令互動**：
-    *   `list`：列出資料庫中所有的名片。
-    *   `remove`：清除重複的名片資料。
-    *   `test`：產生一張測試用的名片，方便您預覽卡片樣式。
+### 1. 📸 智慧名片掃描與 OCR 結構化
+* 傳送任何名片圖片，Bot 將自動調用 Vertex AI 多模態模型（`gemini-3-flash-preview` / `gemini-1.5-flash`）進行高精度視覺分析。
+* 自動提取**姓名、職稱、公司、地址、電話、Email** 等欄位並轉化為結構化 JSON 資料，隨後安全地儲存至您的 Firebase 資料庫。
 
-## 📱 QR Code 名片匯入功能
+### 2. 🤖 Vertex AI ADK 智慧 Agent
+* 導入 Google 官方最新的 **Agent Development Kit (ADK)** 框架。
+* 透過**動態閉包 (Closures)** 技術在對話生命週期中動態生成 Tools。這不僅保障了使用者的資料隱私（使用者 A 絕對無法存取使用者 B 的名片），還能在模型思考期間完美收集「想要呈現給使用者的所有名片 ID」。
 
-### 功能特色
+### 3. 💬 全自然語言名片管理
+* 支援多輪自然語言對話操作。您可以用最直覺的中文命令：
+  * *「幫我查王大明的電話是多少？」*
+  * *「幫我把大明公司的地址改成信義路五段1號」*
+  * *「幫我把這張名片加上『下週一開會』的備忘錄」*
+* Agent 將自主判斷並連續調用 `get_all_namecards` -> 尋找對應 `card_id` -> 執行 `update_namecard_field` / `update_namecard_memo` -> 調用 `display_namecard` 將更新後的精美 Flex Message 呈現在 LINE 視窗中！
 
-本專案整合了 **vCard QR Code** 生成功能，讓您可以將數位化的名片資料快速加入手機通訊錄，無需手動逐一輸入。
+### 4. 🛡️ 生產級本機關鍵字備援搜尋 (Local Fallback)
+* 為了確保高可用性（SLA），當 Vertex AI API 達到配額限制、遭遇網路超時或故障時，Webhook 會**自動無縫降級**為本機 Firebase 關鍵字搜尋模式。
+* 依然能夠精準抓取相符的名片並以 Flex Message 卡片回傳，提供 100% 不中斷的優雅使用者體驗。
 
-### 使用流程
+### 5. 📥 一鍵產出 QR Code 匯入手機通訊錄
+* 點擊卡片上的「📥 加入通訊錄」按鈕，系統會提取 Firebase 內名片資料，自動生成符合 **vCard 3.0** 國際標準協定的字串。
+* 將其編碼為高解晰度 QR Code 圖片並上傳至 Firebase Storage (`qrcodes/{user_id}/{card_id}.png`)，提供 HTTPS 公開 URL。
+* 使用者只需使用手機相機掃描，即可一秒將聯絡人匯入 iPhone 或 Android 本機通訊錄，免去手動輸入的痛苦！
 
-1. **上傳名片圖片** → Gemini Pro Vision API 自動辨識
-2. **查看名片資訊** → 在 LINE 中顯示精美的 Flex Message
-3. **點擊「📥 加入通訊錄」按鈕**
-4. **收到 QR Code 圖片** → Bot 自動生成並發送
-5. **用手機相機掃描** → 系統自動識別 vCard 格式
-6. **點擊「加入聯絡人」** → 完成匯入 ✅
+### 6. 📊 快捷選單與便利指令
+* 支援 LINE 內建 Quick Replies 快捷按鈕：
+  * **📊 統計**：即時查看資料庫名片總數、本月新增數量以及最常合作的公司。
+  * **📋 列表**：快速得知目前已儲存的聯絡人總量。
+  * **🧪 測試**：一鍵產生精美的模擬測試名片卡片。
+  * **ℹ️ 說明**：取得最完整的操作功能導覽。
+* **重複清理**：輸入關鍵字 `remove`，系統將自動比對並清除擁有重複 Email 的名片。
 
-### 技術實作
+---
 
-#### vCard 標準格式
-- 使用 **vCard 3.0** 標準格式（iPhone/Android 原生支援）
-- 包含完整資訊：姓名、職稱、公司、電話、Email、地址、備註
-- 自動處理特殊字元轉義，確保資料正確性
-
-#### QR Code 生成
-- 使用 Python `qrcode` 套件生成 PNG 圖片
-- 優化參數設定，確保手機相機可快速掃描
-- 自動調整 QR Code 大小，適應不同資料量
-
-#### Firebase Storage 整合
-- QR Code 圖片自動上傳到 Firebase Storage
-- 檔案路徑：`qrcodes/{user_id}/{card_id}.png`
-- 圖片設為公開可讀取，透過 HTTPS URL 提供
-- 使用 Firebase Admin SDK，安全且高效
-
-### 技術架構
+## 🛠️ 技術架構
 
 ```
-使用者上傳名片
-    ↓
-Gemini Vision API 辨識
-    ↓
-儲存到 Firebase Realtime Database
-    ↓
-點擊「加入通訊錄」按鈕
-    ↓
-生成 vCard 格式字串
-    ↓
-編碼為 QR Code (PNG)
-    ↓
-上傳到 Firebase Storage
-    ↓
-回傳圖片 URL 給使用者
-    ↓
-掃描加入通訊錄 ✅
+                     ┌──────────────────┐
+                     │     LINE App     │
+                     └────────┬─────────┘
+                              │ (HTTPS Webhook)
+                              ▼
+                 ┌──────────────────────────┐
+                 │ FastAPI App on Cloud Run │
+                 └──────┬────────────┬──────┘
+                        │            │
+      ┌─────────────────┘            └─────────────────┐
+      ▼ (Vertex AI & ADK)                              ▼ (Firebase Admin SDK)
+┌───────────────────────────┐                ┌──────────────────────────┐
+│   ADK Agent & Runner      │                │   Firebase Database      │
+├─ gemini-3-flash-preview   │                ├─ Realtime DB (名片資料)  │
+├─ Dynamic Closure Tools    │                └─ Storage (vCard QR Code) │
+│  (DB CRUD Operations)     │                └──────────────────────────┘
+└───────────────────────────┘
 ```
 
-### 相容性
+---
 
-| 平台 | 支援情況 | 說明 |
-|------|---------|------|
-| **iPhone** | ✅ 完整支援 | 相機 App 自動識別，直接提示「加入聯絡人」 |
-| **Android** | ✅ 完整支援 | Google Lens 或相機掃描後可匯入 |
-| **LINE 內建掃描器** | ✅ 支援 | 可正常掃描並開啟連結 |
+## 🚀 部署至 Google Cloud Run (極致簡化版)
 
-### Firebase Storage 設定
+本專案已完全容器化並適配 **Google Cloud Run**。我們強烈推薦使用 **IAM 角色免 Key 認證**（Application Default Credentials），這能讓您在完全不需要配置繁瑣的 JSON 密鑰環境變數下，完成極速且安全的部署。
 
-#### Storage Rules 建議設定
+### 1. 事前準備
+1. 擁有一個已啟用帳單的 [Google Cloud 專案](https://console.cloud.google.com/)。
+2. 啟用專案中的 **Vertex AI API** 與 **Cloud Build API**。
+3. 建立一個 [Firebase 專案](https://console.firebase.google.com/)，並啟用 **Realtime Database** 與 **Cloud Storage**。
+4. 取得 LINE Bot 的 **Channel Secret** 與 **Channel Access Token**。
 
-為了確保安全性，建議使用以下 Firebase Storage Rules：
+### 2. 極速單指令部署 (Cloud Run Source Deploy)
+您甚至不需要手動打包 Docker Image。在專案根目錄下執行以下指令，GCP 將自動完成程式碼上傳、建置並完成服務部署：
 
-```javascript
-rules_version = '2';
-
-service firebase.storage {
-  match /b/{bucket}/o {
-    match /{allPaths=**} {
-      allow read: if true;   // 允許公開讀取 QR Code
-      allow write: if false; // 禁止客戶端寫入（只有 Admin SDK 能寫）
-    }
-  }
-}
+```bash
+# 請將以下變數替換為您自己的設定值
+gcloud run deploy linebot-namecard-python \
+  --source . \
+  --platform managed \
+  --region asia-east1 \
+  --allow-unauthenticated \
+  --set-env-vars "ChannelSecret=YOUR_LINE_CHANNEL_SECRET,\
+ChannelAccessToken=YOUR_LINE_CHANNEL_ACCESS_TOKEN,\
+PROJECT_ID=YOUR_GCP_PROJECT_ID,\
+FIREBASE_URL=https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com/,\
+FIREBASE_STORAGE_BUCKET=YOUR_PROJECT_ID.appspot.com"
 ```
 
-**為什麼這樣安全？**
-- ✅ Cloud Run 使用 Firebase Admin SDK，擁有完整權限（繞過 Rules）
-- ✅ QR Code 圖片可以被任何人透過 URL 讀取（符合需求）
-- ✅ 禁止客戶端寫入，防止惡意上傳
+> [!TIP]
+> 部署完成後，GCP 控制台會輸出一個服務網址（Service URL），例如 `https://linebot-namecard-xxxxxx-de.a.run.app`。請將此網址貼回 LINE Developers Console 的 **Webhook URL** 設定中（別忘了在網址最後方加上斜線 `/`）。
 
-## 🚀 如何部署到 GCP (Google Cloud Platform)
+### 3. IAM 權限設定 (免環境變數認證，強烈推薦！)
+為了讓部署在 Cloud Run 上的應用程式能夠直接讀寫 Firebase Realtime Database / Storage，並呼叫 Vertex AI 服務，您只需要為 **Cloud Run 的執行服務帳戶**（預設通常是 `Compute Engine default service account` 或您自訂的 Service Account）在 IAM 主控台中賦予以下三個角色：
 
-本專案已容器化，推薦使用 [Google Cloud Run](https://cloud.google.com/run) 進行部署，它能提供 Serverless 的彈性與自動擴展能力。
+1. **Vertex AI 使用者** (`roles/aiplatform.user`)：讓 ADK 與 Gemini 能夠執行生成。
+2. **Firebase Realtime Database 管理員** (`roles/firebasedatabase.admin`)：允許讀寫 RTDB。
+3. **Storage 管理員** (`roles/storage.admin`)：用於將 vCard QR Code 寫入 Storage。
 
-### 部署步驟
+設定完成後，Cloud Run 會自動透過 `credentials.ApplicationDefault()` 進行安全的身分驗證，**無需額外設定任何 `GOOGLE_APPLICATION_CREDENTIALS` 檔案或 JSON 環境變數**！
 
-1.  **打包成 Docker Image**：
-    在您的開發環境中，確保已安裝 Docker。於專案根目錄下，執行以下指令將應用程式打包成一個 Docker image：
-    ```bash
-    # {PROJECT_ID} 是您的 GCP 專案 ID
-    # {IMAGE_NAME} 是您為這個映像檔取的名稱 (例如：linebot-namecard)
-    gcloud builds submit --tag gcr.io/{PROJECT_ID}/{IMAGE_NAME}
-    ```
-    這個指令會使用 GCP Cloud Build 自動打包並將映像檔推送到 Artifact Registry。
+---
 
-2.  **部署到 Cloud Run**：
-    映像檔準備好後，執行以下指令將其部署到 Cloud Run：
-    ```bash
-    gcloud run deploy {IMAGE_NAME} \
-      --image gcr.io/{PROJECT_ID}/{IMAGE_NAME} \
-      --platform managed \
-      --region asia-east1 \
-      --allow-unauthenticated \
-      --set-env-vars "ChannelSecret=YOUR_CHANNEL_SECRET,ChannelAccessToken=YOUR_CHANNEL_ACCESS_TOKEN,GEMINI_API_KEY=YOUR_GEMINI_API_KEY,FIREBASE_URL=YOUR_FIREBASE_URL,FIREBASE_STORAGE_BUCKET=YOUR_PROJECT_ID.appspot.com,GOOGLE_APPLICATION_CREDENTIALS_JSON=YOUR_FIREBASE_SERVICE_ACCOUNT_JSON"
-    ```
-    部署成功後，GCP 會提供一個服務網址 (Service URL)，這就是您的 LINE Bot Webhook URL。
+### 💡 備援方案：本機測試或跨平台部署 (使用 JSON Key)
+如果您是在本機開發、或是將專案部署在 GCP 之外的平台（例如 Heroku, Render 等），無法使用 IAM 服務帳戶認證時：
+1. 請至 Firebase 專案設定 -> `服務帳戶`，點擊「產生新的私密金鑰」並下載 JSON 檔案。
+2. 將該 JSON 檔案的內容壓縮並轉換為單行字串。
+3. 在部署或啟動環境中，加入環境變數 `GOOGLE_APPLICATION_CREDENTIALS_JSON`，並貼入該 JSON 字串。系統會自動從此環境變數中讀取並初始化 Firebase。
 
-### 環境變數說明
+---
 
-在部署時，您需要設定以下幾個環境變數，這是讓 Bot 正常運作的關鍵：
+## 💻 本機開發與執行
 
-*   `ChannelSecret`：**[必要]** LINE Channel 的 **Channel secret**。您可以在 [LINE Developers Console](https://developers.line.biz/console/) 中找到。
-*   `ChannelAccessToken`：**[必要]** LINE Channel 的 **Channel access token**。同樣在 LINE Developers Console 中取得。
-*   `GEMINI_API_KEY`：**[必要]** 您的 Google Gemini API 金鑰。您可以從 [Google AI Studio](https://aistudio.google.com/app/apikey) 取得。
-*   `FIREBASE_URL`：**[必要]** 您的 Firebase Realtime Database 網址。格式通常是 `https://{your-project-id}-default-rtdb.firebaseio.com/`。
-*   `FIREBASE_STORAGE_BUCKET`：**[必要]** 您的 Firebase Storage Bucket 名稱。格式通常是 `{your-project-id}.appspot.com`。用於儲存 QR Code 圖片。請確保 Firebase Storage 已啟用，並且服務帳戶有寫入權限。
-*   `GOOGLE_APPLICATION_CREDENTIALS_JSON`：**[必要]** Firebase 服務帳戶的金鑰 (JSON 格式)。
-    1.  前往您的 Firebase 專案設定 -> `服務帳戶`。
-    2.  點擊「產生新的私密金鑰」並下載 JSON 檔案。
-    3.  **請將整個 JSON 檔案的內容複製成一個單行的字串**，並在部署指令中貼上。這是因為 Cloud Run 的環境變數不支援直接上傳檔案。
+### 1. 安裝相依套件
+建議使用 Python 3.10 或以上版本。在專案根目錄下執行：
+```bash
+pip install -r requirements.txt
+```
 
-## 📜 License (授權條款)
+### 2. 設定環境變數
+在本機開發時，請設定對應的環境變數。您可以建立一個啟動指令檔或在 Shell 中匯入：
+```bash
+export ChannelSecret="YOUR_SECRET"
+export ChannelAccessToken="YOUR_TOKEN"
+export PROJECT_ID="YOUR_GCP_PROJECT_ID"
+export FIREBASE_URL="https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com/"
+export FIREBASE_STORAGE_BUCKET="YOUR_PROJECT_ID.appspot.com"
+
+# 本機開發必備：指定服務帳戶金鑰路徑以進行驗證
+export GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account.json"
+```
+
+### 3. 啟動本機伺服器
+使用 Uvicorn 啟動 FastAPI 服務：
+```bash
+uvicorn app.main:app --reload --port 8080
+```
+
+### 4. 本機 Webhook 測試
+使用 [ngrok](https://ngrok.com/) 或 `cloudflared` 將本機的 8080 端口對外曝露，並將產生的 HTTPS 網址設定至 LINE Developers Console 進行測試：
+```bash
+ngrok http 8080
+```
+
+---
+
+## 📜 授權條款 (License)
 
 本專案採用 **MIT License** 授權。詳細資訊請參考 `LICENSE` 檔案。
-
-## 🤝 如何貢獻 (Contributing)
-
-非常歡迎您為這個專案做出貢獻！如果您有任何改善建議或發現 Bug，請隨時提出 Issue 或發送 Pull Request。
-
-1.  Fork 本專案。
-2.  建立您的分支 (`git checkout -b feature/AmazingFeature`)。
-3.  提交您的變更 (`git commit -m 'Add some AmazingFeature'`)。
-4.  將分支推送到遠端 (`git push origin feature/AmazingFeature`)。
-5.  開啟一個 Pull Request。

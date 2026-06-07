@@ -110,6 +110,73 @@ async def handle_postback_event(event: PostbackEvent, user_id: str):
         )
         return
 
+    elif action == 'confirm_update':
+        state = user_states.get(user_id, {})
+        if state.get('action') == 'pending_update':
+            update_type = state.get('update_type')
+            card_id = state.get('card_id')
+            card_name = firebase_utils.get_name_from_card(
+                user_id, card_id
+            ) or "聯絡人"
+            success = False
+
+            if update_type == 'field':
+                field = state.get('field')
+                value = state.get('value')
+                success = firebase_utils.update_namecard_field(
+                    user_id, card_id, field, value
+                )
+            elif update_type == 'memo':
+                memo = state.get('memo')
+                success = firebase_utils.update_namecard_memo(
+                    card_id, user_id, memo
+                )
+
+            if success:
+                updated_card = firebase_utils.get_card_by_id(user_id, card_id)
+                reply_msgs = [TextSendMessage(
+                    text=f"「{card_name}」的資料已成功更新！",
+                    quick_reply=get_quick_reply_items()
+                )]
+                if updated_card:
+                    reply_msgs.append(
+                        flex_messages.get_namecard_flex_msg(
+                            updated_card, card_id
+                        )
+                    )
+                await line_bot_api.reply_message(event.reply_token, reply_msgs)
+            else:
+                await line_bot_api.reply_message(
+                    event.reply_token,
+                    TextSendMessage(
+                        text='更新資料時發生錯誤，請稍後再試。',
+                        quick_reply=get_quick_reply_items()
+                    )
+                )
+            if user_id in user_states:
+                del user_states[user_id]
+        else:
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text='沒有待確認的更新操作，或操作已過期。',
+                    quick_reply=get_quick_reply_items()
+                )
+            )
+        return
+
+    elif action == 'cancel_update':
+        if user_id in user_states:
+            del user_states[user_id]
+        await line_bot_api.reply_message(
+            event.reply_token,
+            TextSendMessage(
+                text='已取消修改操作。',
+                quick_reply=get_quick_reply_items()
+            )
+        )
+        return
+
     # 處理需要 card_id 的 action
     card_name = firebase_utils.get_name_from_card(user_id, card_id)
     if not card_name:
@@ -117,7 +184,16 @@ async def handle_postback_event(event: PostbackEvent, user_id: str):
             event.reply_token, TextSendMessage(text='找不到該名片資料。'))
         return
 
-    if action == 'add_memo':
+    if action == 'show_card':
+        card_data = firebase_utils.get_card_by_id(user_id, card_id)
+        if card_data:
+            reply_msg = flex_messages.get_namecard_flex_msg(card_data, card_id)
+            await line_bot_api.reply_message(event.reply_token, [reply_msg])
+        else:
+            await line_bot_api.reply_message(
+                event.reply_token, TextSendMessage(text='找不到該名片資料。'))
+
+    elif action == 'add_memo':
         user_states[user_id] = {'action': 'adding_memo', 'card_id': card_id}
         reply_text = f"請輸入關於「{card_name}」的備忘錄："
         await line_bot_api.reply_message(
@@ -291,13 +367,24 @@ def make_adk_tools(user_id: str, found_card_ids: list):
 
     def update_namecard_memo(card_id: str, memo: str) -> bool:
         """更新特定名片的備忘錄／記事資訊。"""
-        return firebase_utils.update_namecard_memo(card_id, user_id, memo)
+        user_states[user_id] = {
+            'action': 'pending_update',
+            'update_type': 'memo',
+            'card_id': card_id,
+            'memo': memo
+        }
+        return True
 
     def update_namecard_field(card_id: str, field: str, value: str) -> bool:
         """更新特定名片的指定欄位（可選欄位有：name、title、company、address、phone、email）。"""
-        return firebase_utils.update_namecard_field(
-            user_id, card_id, field, value
-        )
+        user_states[user_id] = {
+            'action': 'pending_update',
+            'update_type': 'field',
+            'card_id': card_id,
+            'field': field,
+            'value': value
+        }
+        return True
 
     return [
         get_all_namecards,
@@ -363,14 +450,67 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
             quick_reply=get_quick_reply_items()
         )]
 
-        # 如果 Agent 有標記要顯示的名片，則附加上 Flex Message
-        if found_card_ids:
-            for card_id in found_card_ids[:4]:
-                card_data = firebase_utils.get_card_by_id(user_id, card_id)
-                if card_data:
-                    reply_msgs.append(
-                        flex_messages.get_namecard_flex_msg(card_data, card_id)
+        # 1. 檢查是否有待確認的修改操作
+        state = user_states.get(user_id, {})
+        if state.get('action') == 'pending_update':
+            card_id = state.get('card_id')
+            card_name = firebase_utils.get_name_from_card(
+                user_id, card_id
+            ) or "聯絡人"
+            update_type = state.get('update_type')
+
+            if update_type == 'field':
+                field = state.get('field')
+                value = state.get('value')
+                field_label = FIELD_LABELS.get(field, field)
+                msg_text = (
+                    f"請問您是否確定要將「{card_name}」的【{field_label}】"
+                    f"修改為：\n\n「{value}」？"
+                )
+            else:  # memo
+                memo = state.get('memo')
+                msg_text = (
+                    f"請問您是否確定要將「{card_name}」的【備忘錄】"
+                    f"修改為：\n\n「{memo}」？"
+                )
+
+            confirm_msg = flex_messages.get_confirm_update_flex_msg(
+                message_text=msg_text,
+                confirm_data="action=confirm_update",
+                cancel_data="action=cancel_update"
+            )
+            reply_msgs.append(confirm_msg)
+
+        # 2. 如果沒有 pending update，才處理名片顯示
+        elif found_card_ids:
+            if len(found_card_ids) <= 4:
+                # 數量小於等於 4，直接顯示 Carousel 詳細名片卡片
+                for card_id in found_card_ids:
+                    card_data = firebase_utils.get_card_by_id(user_id, card_id)
+                    if card_data:
+                        reply_msgs.append(
+                            flex_messages.get_namecard_flex_msg(
+                                card_data, card_id
+                            )
+                        )
+            else:
+                # 數量大於 4，以清單 Flex Message 顯示進行消歧義
+                cards_list = []
+                for card_id in found_card_ids:
+                    card_data = firebase_utils.get_card_by_id(user_id, card_id)
+                    if card_data:
+                        cards_list.append({
+                            "card_id": card_id,
+                            "name": card_data.get("name", "N/A"),
+                            "company": card_data.get("company", "N/A"),
+                            "title": card_data.get("title", "N/A")
+                        })
+                if cards_list:
+                    list_msg = flex_messages.get_namecard_list_flex_msg(
+                        cards=cards_list,
+                        title_text="🔍 找到多個相符的名片"
                     )
+                    reply_msgs.append(list_msg)
 
         await line_bot_api.reply_message(event.reply_token, reply_msgs)
 
@@ -389,15 +529,38 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
                         fallback_matches.append((card_id, card_data))
 
             if fallback_matches:
-                reply_msgs = [TextSendMessage(
-                    text="「智慧搜尋」服務暫時無法取得，"
-                         "已自動啟用「關鍵字備援搜尋」為您找到以下相關名片：",
-                    quick_reply=get_quick_reply_items()
-                )]
-                for card_id, card_data in fallback_matches[:4]:
-                    reply_msgs.append(
-                        flex_messages.get_namecard_flex_msg(card_data, card_id)
+                if len(fallback_matches) <= 4:
+                    reply_msgs = [TextSendMessage(
+                        text="「智慧搜尋」服務暫時無法取得，"
+                             "已自動啟用「關鍵字備援搜尋」為您找到以下相關名片：",
+                        quick_reply=get_quick_reply_items()
+                    )]
+                    for card_id, card_data in fallback_matches:
+                        reply_msgs.append(
+                            flex_messages.get_namecard_flex_msg(
+                                card_data, card_id
+                            )
+                        )
+                else:
+                    reply_msgs = [TextSendMessage(
+                        text="「智慧搜尋」服務暫時無法取得，"
+                             "已自動啟用「關鍵字備援搜尋」為您找到以下相關名片清單：",
+                        quick_reply=get_quick_reply_items()
+                    )]
+                    cards_list = []
+                    for card_id, card_data in fallback_matches:
+                        cards_list.append({
+                            "card_id": card_id,
+                            "name": card_data.get("name", "N/A"),
+                            "company": card_data.get("company", "N/A"),
+                            "title": card_data.get("title", "N/A")
+                        })
+                    list_msg = flex_messages.get_namecard_list_flex_msg(
+                        cards=cards_list,
+                        title_text="🔍 關鍵字備援搜尋結果"
                     )
+                    reply_msgs.append(list_msg)
+
                 await line_bot_api.reply_message(event.reply_token, reply_msgs)
                 return
         except Exception as fallback_err:

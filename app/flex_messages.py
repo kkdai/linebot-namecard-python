@@ -188,3 +188,172 @@ def get_edit_options_flex_msg(card_id: str, card_name: str) -> FlexSendMessage:
         alt_text=f"編輯 {card_name} 的資料",
         contents=flex_msg
     )
+
+
+def get_namecard_list_flex_msg(
+    cards: list, title_text: str = "🔍 找到多個相符的名片"
+) -> FlexSendMessage:
+    """產生一個包含聯絡人清單的 Flex Message，點擊其中一筆可顯示詳細名片卡片。"""
+    contents = []
+
+    # 限制清單最多顯示 8 筆，確保符合 LINE 訊息長度限制
+    for card in cards[:8]:
+        card_id = card.get("card_id")
+        name = card.get("name", "N/A")
+        company = card.get("company", "N/A")
+        title = card.get("title", "N/A")
+
+        info_text = company
+        if title and title != "N/A":
+            info_text = f"{company} | {title}"
+
+        contents.append({
+            "type": "box",
+            "layout": "horizontal",
+            "paddingAll": "10px",
+            "action": {
+                "type": "postback",
+                "label": f"顯示 {name}",
+                "data": f"action=show_card&card_id={card_id}",
+                "displayText": f"我想看 {name} 的名片"
+            },
+            "contents": [
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "flex": 4,
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": name,
+                            "weight": "bold",
+                            "size": "md",
+                            "color": "#111111"
+                        },
+                        {
+                            "type": "text",
+                            "text": info_text,
+                            "size": "xs",
+                            "color": "#555555",
+                            "margin": "xs",
+                            "wrap": True
+                        }
+                    ]
+                },
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "flex": 1,
+                    "justifyContent": "center",
+                    "alignItems": "flex-end",
+                    "contents": [
+                        {
+                            "type": "text",
+                            "text": "查看 ❯",
+                            "size": "xs",
+                            "color": "#0367D3",
+                            "weight": "bold"
+                        }
+                    ]
+                }
+            ]
+        })
+        contents.append({"type": "separator"})
+
+    if contents:
+        contents.pop()  # 移除最後一條分隔線
+
+    flex_msg = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": title_text,
+                    "weight": "bold",
+                    "size": "lg",
+                    "color": "#0367D3"
+                },
+                {
+                    "type": "text",
+                    "text": (
+                        f"共找到 {len(cards)} 筆相符資料，"
+                        "請點選要查看的名片："
+                    ),
+                    "size": "xs",
+                    "color": "#888888",
+                    "margin": "sm"
+                },
+                {"type": "separator", "margin": "md"},
+                {
+                    "type": "box",
+                    "layout": "vertical",
+                    "margin": "md",
+                    "contents": contents
+                }
+            ]
+        }
+    }
+
+    return FlexSendMessage(alt_text=title_text, contents=flex_msg)
+
+
+def get_confirm_update_flex_msg(
+    message_text: str, confirm_data: str, cancel_data: str
+) -> FlexSendMessage:
+    """產生一個用於確認修改動作的 Flex Message Bubble"""
+    flex_msg = {
+        "type": "bubble",
+        "body": {
+            "type": "box",
+            "layout": "vertical",
+            "contents": [
+                {
+                    "type": "text",
+                    "text": "⚠️ 確認修改資料",
+                    "weight": "bold",
+                    "size": "lg",
+                    "color": "#D32F2F"
+                },
+                {
+                    "type": "text",
+                    "text": message_text,
+                    "size": "md",
+                    "margin": "md",
+                    "wrap": True,
+                    "color": "#333333"
+                }
+            ]
+        },
+        "footer": {
+            "type": "box",
+            "layout": "horizontal",
+            "spacing": "sm",
+            "contents": [
+                {
+                    "type": "button",
+                    "style": "primary",
+                    "color": "#D32F2F",
+                    "action": {
+                        "type": "postback",
+                        "label": "確定修改",
+                        "data": confirm_data,
+                        "displayText": "確定修改"
+                    }
+                },
+                {
+                    "type": "button",
+                    "style": "secondary",
+                    "action": {
+                        "type": "postback",
+                        "label": "取消",
+                        "data": cancel_data,
+                        "displayText": "取消修改"
+                    }
+                }
+            ]
+        }
+    }
+    return FlexSendMessage(alt_text="確認修改資料", contents=flex_msg)

@@ -365,7 +365,7 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
 
         # 如果 Agent 有標記要顯示的名片，則附加上 Flex Message
         if found_card_ids:
-            for card_id in found_card_ids[:5]:
+            for card_id in found_card_ids[:4]:
                 card_data = firebase_utils.get_card_by_id(user_id, card_id)
                 if card_data:
                     reply_msgs.append(
@@ -394,7 +394,7 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
                          "已自動啟用「關鍵字備援搜尋」為您找到以下相關名片：",
                     quick_reply=get_quick_reply_items()
                 )]
-                for card_id, card_data in fallback_matches[:5]:
+                for card_id, card_data in fallback_matches[:4]:
                     reply_msgs.append(
                         flex_messages.get_namecard_flex_msg(card_data, card_id)
                     )

@@ -27,10 +27,48 @@ def generate_gemini_text_complete(messages: list) -> object:
     return response
 
 
+NAMECARD_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "name": {
+            "type": "STRING",
+            "description": "聯絡人姓名，如果看不出來，請填寫 N/A"
+        },
+        "title": {
+            "type": "STRING",
+            "description": "職稱或頭銜，如果看不出來，請填寫 N/A"
+        },
+        "company": {
+            "type": "STRING",
+            "description": "公司名稱，如果看不出來，請填寫 N/A"
+        },
+        "address": {
+            "type": "STRING",
+            "description": "公司或聯絡地址，如果看不出來，請填寫 N/A"
+        },
+        "phone": {
+            "type": "STRING",
+            "description": (
+                "電話號碼，格式為 #886-0123-456-789,1234。"
+                "沒有分機就忽略 ,1234。如果看不出來，請填寫 N/A"
+            )
+        },
+        "email": {
+            "type": "STRING",
+            "description": "電子郵件信箱，如果看不出來，請填寫 N/A"
+        }
+    },
+    "required": ["name", "title", "company", "address", "phone", "email"]
+}
+
+
 def generate_json_from_image(img: PIL.Image.Image, prompt: str) -> object:
     model = GenerativeModel(
         "gemini-3-flash-preview",
-        generation_config={"response_mime_type": "application/json"},
+        generation_config={
+            "response_mime_type": "application/json",
+            "response_schema": NAMECARD_SCHEMA
+        },
     )
     img_part = Part.from_data(data=pil_to_bytes(img), mime_type="image/jpeg")
     response = model.generate_content([prompt, img_part], stream=False)

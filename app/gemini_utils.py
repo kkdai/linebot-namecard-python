@@ -23,7 +23,7 @@ def generate_gemini_text_complete(messages: list) -> object:
     # Convert list of dicts message format to prompt string if needed
     # line_handlers.py sends [{"role": "user", "parts": [smart_query_prompt]}]
     prompt = messages[0]["parts"][0]
-    response = model.generate_content(prompt)
+    response = model.generate_content(prompt, labels={"client_id": "namecard"})
     return response
 
 
@@ -71,5 +71,9 @@ def generate_json_from_image(img: PIL.Image.Image, prompt: str) -> object:
         },
     )
     img_part = Part.from_data(data=pil_to_bytes(img), mime_type="image/jpeg")
-    response = model.generate_content([prompt, img_part], stream=False)
+    response = model.generate_content(
+        [prompt, img_part],
+        stream=False,
+        labels={"client_id": "namecard"}
+    )
     return response

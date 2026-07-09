@@ -14,6 +14,7 @@ from google.adk import Agent, Runner
 from google.adk.sessions.in_memory_session_service import (
     InMemorySessionService
 )
+from google.genai.types import GenerateContentConfig
 
 FIELD_LABELS = {
     "name": "姓名", "title": "職稱", "company": "公司",
@@ -420,6 +421,9 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
             "向使用者回覆操作結果或搜尋進度。"
         ),
         tools=tools,
+        generate_content_config=GenerateContentConfig(
+            labels={"client_id": "namecard"}
+        ),
     )
 
     runner = Runner(

@@ -4,6 +4,7 @@ from google.adk import Agent, Runner
 from google.adk.sessions.in_memory_session_service import (
     InMemorySessionService
 )
+from google.genai.types import GenerateContentConfig
 
 
 async def main():
@@ -24,6 +25,9 @@ async def main():
             instruction=(
                 "You are a verification assistant. "
                 "Respond with a concise greeting."
+            ),
+            generate_content_config=GenerateContentConfig(
+                labels={"client_id": "namecard"}
             ),
         )
         print("ADK Agent created successfully.")

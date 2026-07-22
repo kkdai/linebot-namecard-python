@@ -1,3 +1,4 @@
+import time
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -24,6 +25,30 @@ def clear_user_states():
     line_handlers.user_states.clear()
     yield
     line_handlers.user_states.clear()
+
+
+def test_sweep_expired_states_removes_only_expired_entries():
+    line_handlers.user_states["expired-user"] = {
+        "action": "awaiting_backside_image",
+        "front_image_bytes": b"front-bytes",
+        "expires_at": time.time() - 10,
+    }
+    line_handlers.user_states["active-user"] = {
+        "action": "pending_backside_confirm",
+        "card_obj": CARD_OBJ,
+        "front_image_bytes": b"front-bytes",
+        "expires_at": time.time() + 300,
+    }
+    line_handlers.user_states["memo-user"] = {
+        "action": "adding_memo",
+        "card_id": "card-1",
+    }
+
+    line_handlers.sweep_expired_states()
+
+    assert "expired-user" not in line_handlers.user_states
+    assert "active-user" in line_handlers.user_states
+    assert "memo-user" in line_handlers.user_states
 
 
 def test_get_backside_confirm_quick_reply_has_two_postback_buttons():

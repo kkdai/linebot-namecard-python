@@ -111,3 +111,25 @@ async def test_backside_confirm_expired_state_replies_expired(
     assert "user-1" not in line_handlers.user_states
     reply_args = mock_line_api.reply_message.call_args.args
     assert "過期" in reply_args[1].text
+
+
+@pytest.mark.asyncio
+async def test_backside_confirm_stale_does_not_clear_unrelated_state(
+        mock_line_api):
+    line_handlers.user_states["user-1"] = {
+        "action": "editing_field",
+        "card_id": "x",
+        "field": "phone",
+    }
+    event = FakePostbackEvent(
+        "action=backside_confirm&has_backside=yes")
+
+    await line_handlers.handle_postback_event(event, "user-1")
+
+    assert line_handlers.user_states["user-1"] == {
+        "action": "editing_field",
+        "card_id": "x",
+        "field": "phone",
+    }
+    reply_args = mock_line_api.reply_message.call_args.args
+    assert "過期" in reply_args[1].text

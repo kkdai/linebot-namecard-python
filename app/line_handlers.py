@@ -73,6 +73,18 @@ def get_backside_confirm_quick_reply():
     ])
 
 
+def sweep_expired_states() -> None:
+    """清除所有使用者中已逾期的暫存狀態（例如未完成的背面辨識流程），
+    避免正面圖片的原始位元組資料無限期留在記憶體中"""
+    now = time.time()
+    expired_user_ids = [
+        user_id for user_id, state in user_states.items()
+        if 'expires_at' in state and state['expires_at'] <= now
+    ]
+    for user_id in expired_user_ids:
+        del user_states[user_id]
+
+
 async def handle_postback_event(event: PostbackEvent, user_id: str):
     postback_data = dict(parse_qsl(event.postback.data))
     action = postback_data.get('action')
@@ -207,7 +219,9 @@ async def handle_postback_event(event: PostbackEvent, user_id: str):
             and state.get('expires_at', 0) > time.time()
         )
         if not is_valid:
-            if user_id in user_states:
+            if state.get('action') in (
+                'pending_backside_confirm', 'awaiting_backside_image'
+            ):
                 del user_states[user_id]
             await line_bot_api.reply_message(
                 event.reply_token,

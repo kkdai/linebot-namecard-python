@@ -8,7 +8,8 @@ import json
 
 from . import config
 from .line_handlers import (
-    handle_text_event, handle_image_event, handle_postback_event)
+    handle_text_event, handle_image_event, handle_postback_event,
+    sweep_expired_states)
 from .bot_instance import close_session, parser
 
 # =====================
@@ -56,6 +57,7 @@ async def handle_callback(request: Request):
         events = parser.parse(body, signature)
     except InvalidSignatureError:
         raise HTTPException(status_code=400, detail="Invalid signature")
+    sweep_expired_states()
     for event in events:
         user_id = event.source.user_id
         if isinstance(event, MessageEvent):

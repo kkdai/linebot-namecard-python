@@ -1,3 +1,4 @@
+import time  # noqa: F401 -- used by Task 4/5 for backside-pending timeout
 from urllib.parse import parse_qsl
 from linebot.models import (
     PostbackEvent, MessageEvent, TextSendMessage, ImageSendMessage,
@@ -20,6 +21,8 @@ FIELD_LABELS = {
     "name": "姓名", "title": "職稱", "company": "公司",
     "address": "地址", "phone": "電話", "email": "Email"
 }
+
+PENDING_BACKSIDE_TIMEOUT_SECONDS = 300
 
 
 def get_quick_reply_items():
@@ -47,6 +50,24 @@ def get_quick_reply_items():
             action=PostbackAction(
                 label="ℹ️ 說明",
                 data="action=show_help"
+            )
+        )
+    ])
+
+
+def get_backside_confirm_quick_reply():
+    """建立「這張名片還有背面嗎」的 Quick Reply 按鈕"""
+    return QuickReply(items=[
+        QuickReplyButton(
+            action=PostbackAction(
+                label="有背面",
+                data="action=backside_confirm&has_backside=yes"
+            )
+        ),
+        QuickReplyButton(
+            action=PostbackAction(
+                label="沒有，直接儲存",
+                data="action=backside_confirm&has_backside=no"
             )
         )
     ])
@@ -577,6 +598,44 @@ async def handle_smart_query(event: MessageEvent, user_id: str, msg: str):
                 quick_reply=get_quick_reply_items()
             )]
         )
+
+
+async def _finalize_and_save_card(
+        card_obj: dict,
+        event: MessageEvent | PostbackEvent,
+        user_id: str) -> None:
+    """執行重複檢查、存檔並回覆使用者（單面與正反面合併後共用）"""
+    existing_card_id = firebase_utils.check_if_card_exists(card_obj, user_id)
+    if existing_card_id:
+        existing_card_data = firebase_utils.get_card_by_id(
+            user_id, existing_card_id)
+        reply_msg = flex_messages.get_namecard_flex_msg(
+            existing_card_data, existing_card_id)
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [TextSendMessage(
+                text="這個名片已經存在資料庫中。",
+                quick_reply=get_quick_reply_items()
+            ), reply_msg],
+        )
+        return
+
+    card_id = firebase_utils.add_namecard(card_obj, user_id)
+    if card_id:
+        reply_msg = flex_messages.get_namecard_flex_msg(card_obj, card_id)
+        chinese_reply_msg = TextSendMessage(
+            text="名片資料已經成功加入資料庫。",
+            quick_reply=get_quick_reply_items()
+        )
+        await line_bot_api.reply_message(
+            event.reply_token, [reply_msg, chinese_reply_msg])
+    else:
+        await line_bot_api.reply_message(
+            event.reply_token,
+            [TextSendMessage(
+                text="儲存名片時發生錯誤。",
+                quick_reply=get_quick_reply_items()
+            )])
 
 
 async def handle_image_event(event: MessageEvent, user_id: str) -> None:

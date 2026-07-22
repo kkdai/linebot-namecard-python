@@ -329,6 +329,12 @@ async def handle_text_event(event: MessageEvent, user_id: str) -> None:
     msg = event.message.text
     user_action = user_states.get(user_id, {}).get('action')
 
+    if user_action in (
+        'pending_backside_confirm', 'awaiting_backside_image'
+    ):
+        del user_states[user_id]
+        user_action = None
+
     if user_action == 'adding_memo':
         await handle_add_memo_state(event, user_id, msg)
     elif user_action == 'editing_field':

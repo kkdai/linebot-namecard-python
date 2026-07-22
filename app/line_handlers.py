@@ -199,6 +199,44 @@ async def handle_postback_event(event: PostbackEvent, user_id: str):
         )
         return
 
+    elif action == 'backside_confirm':
+        has_backside = postback_data.get('has_backside')
+        state = user_states.get(user_id, {})
+        is_valid = (
+            state.get('action') == 'pending_backside_confirm'
+            and state.get('expires_at', 0) > time.time()
+        )
+        if not is_valid:
+            if user_id in user_states:
+                del user_states[user_id]
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(
+                    text='沒有待確認的名片資料，或操作已過期，'
+                         '請重新傳送名片圖片。',
+                    quick_reply=get_quick_reply_items()
+                )
+            )
+            return
+
+        if has_backside == 'yes':
+            user_states[user_id] = {
+                'action': 'awaiting_backside_image',
+                'front_image_bytes': state['front_image_bytes'],
+                'expires_at': (
+                    time.time() + PENDING_BACKSIDE_TIMEOUT_SECONDS
+                )
+            }
+            await line_bot_api.reply_message(
+                event.reply_token,
+                TextSendMessage(text='請傳送背面照片 📸')
+            )
+        else:
+            del user_states[user_id]
+            await _finalize_and_save_card(
+                state['card_obj'], event, user_id)
+        return
+
     # 處理需要 card_id 的 action
     card_name = firebase_utils.get_name_from_card(user_id, card_id)
     if not card_name:

@@ -77,3 +77,26 @@ def generate_json_from_image(img: PIL.Image.Image, prompt: str) -> object:
         labels={"client_id": "namecard"}
     )
     return response
+
+
+def generate_json_from_two_images(
+        front_img: PIL.Image.Image,
+        back_img: PIL.Image.Image,
+        prompt: str) -> object:
+    model = GenerativeModel(
+        "gemini-3-flash-preview",
+        generation_config={
+            "response_mime_type": "application/json",
+            "response_schema": NAMECARD_SCHEMA
+        },
+    )
+    front_part = Part.from_data(
+        data=pil_to_bytes(front_img), mime_type="image/jpeg")
+    back_part = Part.from_data(
+        data=pil_to_bytes(back_img), mime_type="image/jpeg")
+    response = model.generate_content(
+        [prompt, front_part, back_part],
+        stream=False,
+        labels={"client_id": "namecard"}
+    )
+    return response

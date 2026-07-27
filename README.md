@@ -15,27 +15,32 @@
 * 傳送任何名片圖片，Bot 將自動調用 Vertex AI 多模態模型（`gemini-3-flash-preview` / `gemini-1.5-flash`）進行高精度視覺分析。
 * 自動提取**姓名、職稱、公司、地址、電話、Email** 等欄位並轉化為結構化 JSON 資料，隨後安全地儲存至您的 Firebase 資料庫。
 
-### 2. 🤖 Vertex AI ADK 智慧 Agent
+### 2. 🔄 名片正反面辨識合併
+* 傳送正面後，Bot 會主動詢問「這張名片還有背面嗎？」，透過 Quick Reply 一鍵確認。
+* 確認有背面後，將正反兩張圖片一次送給 Gemini 合併辨識，中英文對照資訊（如姓名、公司）會自動整合成單一欄位（例如「王大明 David Wang」）。
+* 若使用者忽略提示、逾時（5 分鐘）或直接輸入其他指令，系統會自動視為單面名片照常儲存，不會卡住流程。
+
+### 3. 🤖 Vertex AI ADK 智慧 Agent
 * 導入 Google 官方最新的 **Agent Development Kit (ADK)** 框架。
 * 透過**動態閉包 (Closures)** 技術在對話生命週期中動態生成 Tools。這不僅保障了使用者的資料隱私（使用者 A 絕對無法存取使用者 B 的名片），還能在模型思考期間完美收集「想要呈現給使用者的所有名片 ID」。
 
-### 3. 💬 全自然語言名片管理
+### 4. 💬 全自然語言名片管理
 * 支援多輪自然語言對話操作。您可以用最直覺的中文命令：
   * *「幫我查王大明的電話是多少？」*
   * *「幫我把大明公司的地址改成信義路五段1號」*
   * *「幫我把這張名片加上『下週一開會』的備忘錄」*
 * Agent 將自主判斷並連續調用 `get_all_namecards` -> 尋找對應 `card_id` -> 執行 `update_namecard_field` / `update_namecard_memo` -> 調用 `display_namecard` 將更新後的精美 Flex Message 呈現在 LINE 視窗中！
 
-### 4. 🛡️ 生產級本機關鍵字備援搜尋 (Local Fallback)
+### 5. 🛡️ 生產級本機關鍵字備援搜尋 (Local Fallback)
 * 為了確保高可用性（SLA），當 Vertex AI API 達到配額限制、遭遇網路超時或故障時，Webhook 會**自動無縫降級**為本機 Firebase 關鍵字搜尋模式。
 * 依然能夠精準抓取相符的名片並以 Flex Message 卡片回傳，提供 100% 不中斷的優雅使用者體驗。
 
-### 5. 📥 一鍵產出 QR Code 匯入手機通訊錄
+### 6. 📥 一鍵產出 QR Code 匯入手機通訊錄
 * 點擊卡片上的「📥 加入通訊錄」按鈕，系統會提取 Firebase 內名片資料，自動生成符合 **vCard 3.0** 國際標準協定的字串。
 * 將其編碼為高解晰度 QR Code 圖片並上傳至 Firebase Storage (`qrcodes/{user_id}/{card_id}.png`)，提供 HTTPS 公開 URL。
 * 使用者只需使用手機相機掃描，即可一秒將聯絡人匯入 iPhone 或 Android 本機通訊錄，免去手動輸入的痛苦！
 
-### 6. 📊 快捷選單與便利指令
+### 7. 📊 快捷選單與便利指令
 * 支援 LINE 內建 Quick Replies 快捷按鈕：
   * **📊 統計**：即時查看資料庫名片總數、本月新增數量以及最常合作的公司。
   * **📋 列表**：快速得知目前已儲存的聯絡人總量。
